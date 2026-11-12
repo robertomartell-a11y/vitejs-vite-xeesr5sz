@@ -1116,7 +1116,7 @@ function iniciar() {
 
 // ---- Conexión a Supabase: identidad, base de datos, PDF ----
 // Reemplazar SUPABASE_URL por la URL del proyecto: Supabase > Project Settings > API > Project URL (https://<ref>.supabase.co)
-const SUPABASE_URL = "https://njrhwojdttnbshhztyqp.supabase.co/rest/v1/";
+const SUPABASE_URL = "https://njrhwojdttnbshhztyqp.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9ri1U4PhUUOBsbK3bkX0Ng_RrNGN30c";
 const BUCKET = "expediente";
 const sb = (window.supabase && window.supabase.createClient) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
