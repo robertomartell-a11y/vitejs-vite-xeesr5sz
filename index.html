@@ -1,14 +1,1890 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <title>RYO Control</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Matriz de Cumplimiento Legal</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<style>
+  :root { color-scheme: light; }
+  body { background: #f9fafb; color: #1f2937; }
+  .status-vigente { background-color: #def7ec; color: #03543f; }
+  .status-alerta { background-color: #fef08a; color: #713f12; animation: pulse 2s infinite; }
+  .status-vencido { background-color: #dc2626; color: #fff; box-shadow: 0 0 0 0 rgba(220,38,38,.6); animation: parpadeo 1.1s steps(1, end) infinite, halo 1.6s ease-out infinite; }
+  .fila-vencida { background: #fff5f5; box-shadow: inset 4px 0 0 #dc2626; }
+  .fila-vencida:hover { background: #ffecec !important; }
+  .fila-alerta { box-shadow: inset 4px 0 0 #eab308; }
+  @keyframes parpadeo { 0% { background-color: #dc2626; } 50% { background-color: #fecaca; color: #7f1d1d; } }
+  @keyframes halo { 0% { box-shadow: 0 0 0 0 rgba(220,38,38,.55); } 100% { box-shadow: 0 0 0 7px rgba(220,38,38,0); } }
+  .dot-ven { width: .55rem; height: .55rem; border-radius: 9999px; background: #dc2626; display: inline-block; animation: halo 1.6s ease-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .status-vencido, .dot-ven { animation: none; } }
+  .status-tramite { background-color: #e1effe; color: #1e429f; }
+  .status-na { background-color: #f3f4f6; color: #6b7280; }
+  .status-pendiente { background-color: #fff; color: #64748b; border: 1px dashed #cbd5e1; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .8; } }
+  @media (prefers-reduced-motion: reduce) { .status-alerta { animation: none; } }
+  td, th, .num { font-variant-numeric: tabular-nums; }
+  .chip-btn:disabled { opacity: .35; cursor: not-allowed; }
+  [hidden] { display: none !important; }
+  /* Buzón desactivado temporalmente */
+  #pregModal, #flotCont { display: none !important; }
+  .cabecera { background: linear-gradient(120deg, #14463f 0%, #1d5c52 55%, #2b6e62 100%); transition: background .3s; }
+  .cabecera.modo-admin { background: linear-gradient(120deg, #123c37 0%, #1a5249 55%, #24655a 100%); box-shadow: inset 0 -3px 0 #f2b84b; }
+  .emblema { width: 3.25rem; height: 3.25rem; border-radius: 1rem; display: grid; place-items: center; flex-shrink: 0;
+    background: radial-gradient(circle at 30% 25%, #ffffff 0%, #d9f3ec 45%, #9fdcc9 100%);
+    box-shadow: 0 0 0 3px rgba(242,184,75,.85), 0 6px 16px rgba(0,0,0,.25); animation: brillo 3.2s ease-in-out infinite; }
+  .emblema svg { width: 2.5rem; height: 2.5rem; }
+  @keyframes brillo { 0%,100% { box-shadow: 0 0 0 3px rgba(242,184,75,.85), 0 6px 16px rgba(0,0,0,.25); } 50% { box-shadow: 0 0 0 3px rgba(242,184,75,1), 0 0 0 9px rgba(242,184,75,.18), 0 6px 18px rgba(0,0,0,.3); } }
+  @media (prefers-reduced-motion: reduce) { .emblema { animation: none; } }
+</style>
+
+<div class="bg-gray-50 text-gray-800 font-sans min-h-screen">
+
+  <header id="cabecera" class="cabecera text-white shadow-md">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+      <div class="flex items-center gap-3">
+        <div class="emblema" aria-hidden="true">
+          <svg viewBox="0 0 48 48" class="w-7 h-7">
+            <path d="M24 4 39 9.5v11.2c0 9.6-6.3 17.6-15 20.3C15.3 38.3 9 30.3 9 20.7V9.5L24 4Z" fill="#0f3d38" stroke="#0f3d38" stroke-width="1.5" stroke-linejoin="round"/>
+            <rect x="16.5" y="13" width="15" height="19" rx="2" fill="#fff"/>
+            <path d="M19.5 18h9M19.5 21.5h9M19.5 25h5" stroke="#5eb8a8" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="31.5" cy="31" r="6.5" fill="#f2b84b" stroke="#0f3d38" stroke-width="1.5"/>
+            <path d="m28.6 31 2 2 3.6-3.8" fill="none" stroke="#0f3d38" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight">Expediente Digital Legal</h1>
+          <p class="text-xs text-teal-100/80">Portal de Regulación y Verificación de Cumplimiento</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap justify-center">
+        <div id="modoBadge" class="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full text-xs border border-white/15">
+          <img id="modoAvatar" alt="" class="hidden w-5 h-5 rounded-full">
+          <span id="modoDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span id="modoTxt" class="text-teal-50 font-medium">Modo Auditor (Solo Lectura)</span>
+        </div>
+        <button id="btnVista" onclick="alternarVista()" class="hidden px-3 py-1.5 rounded-full text-xs font-medium border border-white/25 text-teal-50 hover:bg-white/10 cursor-pointer"></button>
+        <button id="btnLogin" onclick="botonSesion()" class="px-3 py-1.5 rounded-full text-xs font-medium border border-white/25 text-teal-50 hover:bg-white/10 cursor-pointer">Iniciar sesión · Normatividad</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 space-y-4">
+
+    <div id="avisoAdmin" hidden class="bg-teal-50 border border-teal-200 rounded-lg p-3 text-xs text-teal-900 flex gap-2">
+      <i data-lucide="user-cog" class="w-4 h-4 shrink-0 mt-0.5"></i>
+      <p><strong>Modo Normatividad.</strong> Puede actualizar estatus, fechas, observaciones y PDF de cada requerimiento con el botón <em>Editar</em>. Los cambios se guardan para todos y quedan registrados con su nombre y fecha. Quien abra el tablero sin permiso de editor lo verá en Modo Auditor, solo lectura.</p>
+    </div>
+
+    <section id="alertas" hidden class="bg-red-50 border border-red-200 rounded-xl p-4">
+      <div class="flex items-start gap-3">
+        <span class="dot-ven mt-1.5 shrink-0"></span>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-bold text-red-800" id="alertasTit"></p>
+          <p class="text-xs text-red-700 mt-0.5">Considera los requerimientos de la dependencia seleccionada. Toca uno para ver solo sus estaciones vencidas.</p>
+          <div id="alertasChips" class="flex flex-wrap gap-2 mt-3"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div class="bg-white border border-gray-200 rounded-xl p-4">
+        <p class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Estaciones</p>
+        <p id="kTot" class="num text-2xl font-bold text-slate-900 mt-1">–</p>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-xl p-4">
+        <p class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Vigentes</p>
+        <p id="kVig" class="num text-2xl font-bold text-emerald-700 mt-1">–</p>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-xl p-4">
+        <p class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Vencen en ≤ 60 días</p>
+        <p id="kAle" class="num text-2xl font-bold text-amber-700 mt-1">–</p>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-xl p-4">
+        <p class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Vencidos</p>
+        <p id="kVen" class="num text-2xl font-bold text-red-700 mt-1">–</p>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-xl p-4 col-span-2 md:col-span-1">
+        <p class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Próximo vencimiento</p>
+        <p id="kProx" class="text-sm font-bold text-slate-900 mt-1 leading-snug">–</p>
+      </div>
+    </section>
+
+    <nav id="depTabs" aria-label="Dependencia" class="bg-white rounded-xl shadow-xs border border-gray-200 p-2 flex gap-1.5 overflow-x-auto"></nav>
+
+    <div class="bg-white rounded-xl shadow-xs border border-gray-200 p-4 flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
+      <div class="flex flex-col sm:flex-row gap-3 flex-1 flex-wrap">
+        <label class="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 sm:min-w-56">
+          Requerimiento legal
+          <select id="reqFilter" onchange="render()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm normal-case tracking-normal font-medium text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-500"></select>
+        </label>
+        <label class="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 flex-1 min-w-48">
+          Buscar
+          <span class="relative">
+            <i data-lucide="search" class="absolute left-3 top-2.5 h-4 w-4 text-gray-400"></i>
+            <input type="text" id="searchInput" oninput="render()" placeholder="Estación, clave, permiso o dirección" class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm normal-case tracking-normal font-normal text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-slate-500">
+          </span>
+        </label>
+        <label class="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 sm:max-w-xs">
+          Razón social
+          <select id="razonFilter" onchange="render()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm normal-case tracking-normal font-normal text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-500">
+            <option value="todos">Todas</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+          Semáforo
+          <select id="semFilter" onchange="render()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm normal-case tracking-normal font-normal text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-500">
+            <option value="todos">Todos</option>
+            <option value="vencido">Vencido</option>
+            <option value="alerta">Vence en ≤ 60 días</option>
+            <option value="vigente">Vigente</option>
+            <option value="tramite">En trámite</option>
+            <option value="na">No aplica</option>
+            <option value="pendiente">Sin capturar</option>
+          </select>
+        </label>
+      </div>
+      <button onclick="abrirCSV()" class="self-end bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-xs transition-colors cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-emerald-300">
+        <i data-lucide="table" class="w-4 h-4"></i> Exportar a Excel (CSV)
+      </button>
+    </div>
+
+    <details id="fundReq" class="bg-white rounded-xl shadow-xs border border-teal-200 group" open>
+      <summary class="list-none cursor-pointer px-4 py-3 flex items-center gap-2 text-sm">
+        <i data-lucide="scale" class="w-4 h-4 text-teal-700 shrink-0"></i>
+        <span class="font-semibold text-slate-800">Fundamento y fuente oficial:</span>
+        <span data-t class="text-slate-700"></span>
+        <span data-a class="ml-1 text-[10px] font-bold uppercase tracking-wider bg-teal-50 text-teal-800 border border-teal-200 rounded-full px-2 py-0.5"></span>
+        <span data-c class="hidden text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 rounded-full px-2 py-0.5">Por confirmar</span>
+        <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 ml-auto transition-transform group-open:rotate-180"></i>
+      </summary>
+      <div data-b class="px-4 pb-4 -mt-1 text-xs text-slate-600"></div>
+    </details>
+
+    <div class="bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm" style="min-width: 940px">
+          <thead>
+            <tr class="bg-slate-100 text-slate-700 font-semibold border-b border-gray-200 text-xs uppercase tracking-wider">
+              <th class="p-3 pl-4 w-[18%]">Estación</th>
+              <th class="p-3 w-[27%]">Ubicación</th>
+              <th class="p-3 w-[19%]">Requerimiento legal</th>
+              <th class="p-3 w-[18%]">Vigencia · ¿Vence pronto?</th>
+              <th class="p-3 pr-4 text-center">Acción digital</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <p id="sinRes" class="hidden p-6 text-center text-sm text-gray-500">Ninguna estación coincide con los filtros seleccionados.</p>
+      <p id="pie" class="px-4 py-3 text-xs text-gray-500 border-t border-gray-100"></p>
+    </div>
+
+    <!-- Estimador de derechos municipales -->
+    <section id="estimador" class="bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden">
+      <button onclick="toggleEstimador()" class="w-full flex items-center justify-between gap-3 p-4 text-left cursor-pointer hover:bg-slate-50">
+        <div class="flex items-center gap-3">
+          <span class="bg-emerald-100 text-emerald-700 rounded-lg p-2"><i data-lucide="calculator" class="w-5 h-5"></i></span>
+          <div>
+            <h2 class="font-bold text-slate-800">Estimador de derechos · Licencia de Funcionamiento Municipal (Juárez)</h2>
+            <p class="text-xs text-slate-500" id="estResumen">Costo estimado de renovación según UMA e inflación de cada año.</p>
+          </div>
+        </div>
+        <i id="estChevron" data-lucide="chevron-down" class="w-5 h-5 text-slate-500 shrink-0"></i>
+      </button>
+      <div id="estCuerpo" hidden class="border-t border-gray-100 p-4 space-y-5">
+        <div class="grid lg:grid-cols-[minmax(0,380px)_1fr] gap-5">
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-600">UMA e inflación por año</h3>
+            <div class="overflow-x-auto"><table class="w-full text-sm border-collapse">
+              <thead><tr class="text-xs text-slate-500 border-b border-gray-200"><th class="py-1.5 text-left">Año</th><th class="py-1.5 text-right">UMA diaria</th><th class="py-1.5 text-right">Inflación del año</th><th class="py-1.5 text-left pl-2">Dato</th></tr></thead>
+              <tbody id="umaBody"></tbody>
+            </table></div>
+            <p class="text-[11px] text-slate-500 leading-relaxed">La UMA de cada año entra en vigor el 1 de febrero y se actualiza con la inflación anual de diciembre del año anterior (INEGI). Los años sin dato oficial se proyectan con la inflación capturada. <span id="umaFuente"></span></p>
+            <div id="umaAdmin" hidden class="flex flex-wrap gap-2">
+              <button onclick="agregarAnioUma()" class="text-xs bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-1.5 cursor-pointer">+ Agregar año</button>
+              <button onclick="guardarParametros()" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 cursor-pointer">Guardar parámetros</button>
+              <span id="umaMsg" class="text-xs text-slate-500 self-center"></span>
+            </div>
+          </div>
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-600">Escenario</h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+              <label class="flex flex-col gap-1"><span class="text-xs text-slate-500">Fecha estimada de pago</span><input id="estFechaPago" type="date" onchange="renderEstimador()" class="border border-gray-300 rounded-lg px-2 py-1.5"></label>
+              <label class="flex flex-col gap-1"><span class="text-xs text-slate-500">Escenario</span>
+                <select id="estEscenario" onchange="renderEstimador()" class="border border-gray-300 rounded-lg px-2 py-1.5">
+                  <option value="base">Base (solo UMA)</option>
+                  <option value="alto" selected>Alto (UMA + ajuste + recargos)</option>
+                </select></label>
+              <label class="flex flex-col gap-1"><span class="text-xs text-slate-500">Mostrar</span>
+                <select id="estFiltro" onchange="renderEstimador()" class="border border-gray-300 rounded-lg px-2 py-1.5">
+                  <option value="vencidas">Vencidas</option>
+                  <option value="vencidas_alerta">Vencidas y por vencer</option>
+                  <option value="todas">Todas (próxima renovación)</option>
+                </select></label>
+              <label class="flex flex-col gap-1"><span class="text-xs text-slate-500">Ajuste de tarifa (escenario alto)</span><input id="pAjuste" type="number" step="0.5" min="0" onchange="renderEstimador()" class="border border-gray-300 rounded-lg px-2 py-1.5"><span class="text-[10px] text-slate-400">% adicional por cambio en Ley de Ingresos</span></label>
+              <label class="flex flex-col gap-1"><span class="text-xs text-slate-500">Recargo mensual (escenario alto)</span><input id="pRecargo" type="number" step="0.05" min="0" onchange="renderEstimador()" class="border border-gray-300 rounded-lg px-2 py-1.5"><span class="text-[10px] text-slate-400">% por mes de atraso (supuesto)</span></label>
+              <label class="flex items-center gap-2 text-xs text-slate-600 self-end pb-2"><input id="estExcluirIP" type="checkbox" checked onchange="renderEstimador()" class="w-4 h-4"> Excluir estaciones sin IP vigente</label>
+            </div>
+            <p class="text-[11px] text-slate-500">Tarifa de renovación (Juárez): hasta 100 m² = <b id="tA"></b> UMA · 101 a 1,000 m² = <b id="tB"></b> UMA · más de 1,000 m² = <b id="tC"></b> UMA. Superficie tomada de cada licencia.</p>
+          </div>
+        </div>
+        <div class="overflow-x-auto border border-gray-100 rounded-lg">
+          <table class="w-full text-sm border-collapse" style="min-width:860px">
+            <thead><tr class="bg-slate-50 text-xs uppercase tracking-wider text-slate-600 border-b border-gray-200">
+              <th class="p-2 pl-3 text-left">Estación</th><th class="p-2 text-right">Superficie</th><th class="p-2 text-right">Tarifa</th><th class="p-2 text-left">Vence</th><th class="p-2 text-right">Periodos</th><th class="p-2 text-right">Derechos</th><th class="p-2 text-right">Recargos</th><th class="p-2 text-right">Total</th><th class="p-2 pr-3 text-right">Redondeado (500)</th>
+            </tr></thead>
+            <tbody id="estBody"></tbody>
+            <tfoot id="estPie"></tfoot>
+          </table>
+        </div>
+        <p id="estNotas" class="text-[11px] text-slate-500 leading-relaxed"></p>
+      </div>
+    </section>
+
+    <!-- Buzón de documentación (Normatividad) -->
+    <section id="bandeja" hidden class="bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden">
+      <div class="p-4 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100">
+        <div class="flex items-center gap-3">
+          <span class="bg-teal-100 text-teal-700 rounded-lg p-2"><i data-lucide="inbox" class="w-5 h-5"></i></span>
+          <div>
+            <h2 class="font-bold text-slate-800">Buzón de documentación de Normatividad <span id="bandejaCont" class="ml-1 text-xs font-semibold bg-red-600 text-white rounded-full px-2 py-0.5 align-middle" hidden></span></h2>
+            <p class="text-xs text-slate-500">Solicitudes y preguntas recibidas por el formulario de Google (se actualiza cada hora). Revise cada una, envíe el documento por correo y actualice su estado. <a href="https://docs.google.com/spreadsheets/d/1bKmSM0Il-E5CFOked0AVr3qipBiFi45reoJ_EkaIfXI/edit" target="_blank" rel="noopener" class="text-teal-700 underline">Ver hoja de respuestas</a></p>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <select id="bandejaFiltro" onchange="pintarBandeja()" class="border border-gray-300 rounded-lg px-2 py-1.5">
+            <option value="abiertas">Pendientes y en revisión</option><option value="pendiente">Pendientes</option><option value="revision">En revisión</option><option value="enviado">Atendidas</option><option value="todas">Todas</option>
+          </select>
+          <select id="bandejaEst" onchange="pintarBandeja()" class="border border-gray-300 rounded-lg px-2 py-1.5"><option value="">Todas las estaciones</option></select>
+        </div>
+      </div>
+      <ul id="bandejaLista" class="divide-y divide-gray-100"></ul>
+      <p id="bandejaVacia" class="p-5 text-sm text-center text-gray-500">No hay solicitudes pendientes.</p>
+    </section>
+
+    <p id="estadoDb" class="text-xs text-gray-500"></p>
+    <p class="text-xs text-gray-500 leading-relaxed">Fuente: expedientes documentales cargados por Normatividad desde la carpeta EXPEDIENTE DIGITAL LEGAL. Fechas de vigencia tomadas de cada documento. Actualizado al <span id="fCarga"></span>. El semáforo marca alerta cuando faltan 60 días o menos para la fecha registrada.</p>
+  </main>
+
+  <!-- Modal visor -->
+  <div id="docModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50" onclick="if(event.target===this)cerrar('docModal')">
+    <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[88vh] flex flex-col overflow-hidden">
+      <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+        <div class="flex items-center gap-2"><i data-lucide="file-text" class="w-5 h-5 text-amber-400"></i><h3 class="font-bold text-base">Visor de Documentación</h3></div>
+        <button onclick="cerrar('docModal')" aria-label="Cerrar" class="text-gray-400 hover:text-white cursor-pointer"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div class="p-5 overflow-y-auto space-y-4">
+        <div class="bg-slate-50 border border-slate-200 p-4 rounded-lg space-y-1.5">
+          <p class="text-[11px] text-gray-500 font-semibold uppercase tracking-wider">Estación</p>
+          <p id="mEst" class="text-lg font-bold text-slate-800"></p>
+          <p id="mRaz" class="text-sm text-slate-600"></p>
+          <p class="text-sm text-gray-600 flex items-start gap-1.5"><i data-lucide="map-pin" class="w-4 h-4 text-gray-400 shrink-0 mt-0.5"></i><span id="mDir"></span></p>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          <div class="col-span-2"><span class="text-[11px] text-gray-400 block">Requerimiento</span><span id="mReq" class="font-semibold text-slate-900"></span></div>
+          <div class="col-span-2"><span class="text-[11px] text-gray-400 block">No. de permiso</span><span id="mPer" class="font-mono text-slate-900"></span></div>
+          <div class="col-span-2"><span class="text-[11px] text-gray-400 block">Vigencia</span><span id="mVto" class="font-medium text-slate-900"></span></div>
+          <div class="col-span-2"><span class="text-[11px] text-gray-400 block">Estatus</span><span id="mSt" class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider mt-0.5"></span></div>
+        </div>
+        <p id="mAct" class="hidden text-[11px] text-gray-500 flex items-center gap-1.5"></p>
+        <div id="mFicha" class="hidden border border-emerald-200 bg-emerald-50/60 rounded-lg p-3">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-emerald-800 mb-2 flex items-center gap-1.5"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i>Datos verificados contra el título</p>
+          <dl id="mFichaList" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-xs"></dl>
+        </div>
+        <div id="mFund" class="border border-teal-200 bg-teal-50/50 rounded-lg p-3 text-xs text-slate-700"><p class="text-[11px] font-semibold uppercase tracking-wider text-teal-800 mb-1.5 flex items-center gap-1.5"><i data-lucide="scale" class="w-3.5 h-3.5"></i>Fundamento y fuente oficial</p><div data-b></div></div>
+        <div id="mOpe" class="hidden border border-slate-300 bg-slate-50 rounded-lg p-3 text-xs text-slate-700">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-700 mb-2 flex items-center gap-1.5"><i data-lucide="key-round" class="w-3.5 h-3.5"></i>Acceso OPE ASEA <span class="normal-case tracking-normal font-medium text-slate-400">· solo administradores</span></p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <label class="flex flex-col gap-1">Correo dado de alta en la OPE<input id="opeCorreo" type="email" maxlength="120" class="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white" placeholder="correo@empresa.com"></label>
+            <label class="flex flex-col gap-1">Dónde se resguarda la contraseña<input id="opeResguardo" type="text" maxlength="160" class="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white" placeholder="Ej. gestor de contraseñas, responsable"></label>
+          </div>
+          <div class="mt-2 flex items-center gap-2">
+            <button id="opeGuardar" type="button" class="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-medium cursor-pointer">Guardar acceso</button>
+            <p id="opeMsg" class="text-[11px] text-slate-500">La contraseña no se guarda en el tablero.</p>
+          </div>
+        </div>
+        <div id="mObs" class="hidden bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 flex gap-2"><i data-lucide="flag" class="w-4 h-4 shrink-0 mt-0.5"></i><p></p></div>
+        <div>
+          <p class="text-[11px] text-gray-500 font-semibold uppercase tracking-wider mb-2">Oficios y documentos (<span id="mN"></span>)</p>
+          <ul id="mDocs" class="divide-y divide-gray-100 border border-gray-200 rounded-lg"></ul>
+          <p id="mCopyMsg" class="text-xs text-emerald-700 mt-2 min-h-4"></p>
+        </div>
+      </div>
+      <div class="p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-2">
+        <button id="mEditar" hidden class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 cursor-pointer">Editar</button>
+        <button id="mPreguntar" onclick="abrirFormulario()" class="mr-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-teal-700 border border-teal-200 bg-teal-50 hover:bg-teal-100 cursor-pointer"><i data-lucide="inbox" class="w-4 h-4"></i>Solicitar documento o preguntar</button>
+        <button onclick="cerrar('docModal')" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer">Cerrar visor</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal edición (Normatividad) -->
+  <div id="editModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-xl shadow-xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="p-4 bg-teal-900 text-white flex justify-between items-center">
+        <div class="flex items-center gap-2"><i data-lucide="pencil-line" class="w-5 h-5 text-teal-300"></i><h3 class="font-bold text-base">Actualizar requerimiento</h3></div>
+        <button onclick="cerrarEditor()" aria-label="Cerrar" class="text-teal-300 hover:text-white cursor-pointer"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <form id="editForm" class="p-5 overflow-y-auto space-y-4" onsubmit="guardar(event)">
+        <div>
+          <p id="eEst" class="font-bold text-slate-900"></p>
+          <p id="eReq" class="text-xs text-slate-500 mt-0.5"></p>
+        </div>
+        <label class="block text-xs font-semibold text-slate-700">Estatus
+          <select id="eTipo" onchange="ajustarEditor()" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-normal bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-400">
+            <option value="">Sin capturar</option>
+            <option value="fecha">Vigente con fecha de vencimiento</option>
+            <option value="sinvto">Vigente sin vencimiento</option>
+            <option value="tramite">En trámite</option>
+            <option value="noaplica">No aplica a esta estación</option>
+          </select>
+        </label>
+        <label id="eFechaWrap" class="block text-xs font-semibold text-slate-700"><span id="eFechaLbl">Fecha de vencimiento</span>
+          <input id="eFecha" type="date" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-normal focus:outline-hidden focus:ring-2 focus:ring-teal-400">
+        </label>
+        <label class="block text-xs font-semibold text-slate-700">Observaciones / fundamento
+          <textarea id="eObs" rows="3" maxlength="1500" placeholder="Ej. Oficio de ingreso, folio, criterio de no aplicabilidad…" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-normal focus:outline-hidden focus:ring-2 focus:ring-teal-400"></textarea>
+        </label>
+        <div>
+          <p class="text-xs font-semibold text-slate-700 mb-1.5">PDF del requerimiento</p>
+          <ul id="ePdfs" class="divide-y divide-gray-100 border border-gray-200 rounded-lg text-sm"></ul>
+          <div id="eSubirWrap" class="mt-2">
+            <label id="eCarpetaWrap" class="hidden mb-2 flex items-center gap-2 text-xs font-medium text-slate-700">Subcarpeta para los PDF que suba
+              <select id="eCarpeta" class="border border-gray-300 rounded-lg px-2 py-1 text-xs bg-white"></select></label>
+            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-teal-300 text-teal-700 text-xs font-medium hover:bg-teal-50 cursor-pointer">
+              <i data-lucide="upload" class="w-4 h-4"></i> Subir PDF
+              <input id="eArchivo" type="file" accept="application/pdf,.pdf" multiple class="sr-only" onchange="subirPdfs(this)">
+            </label>
+            <span id="eSubirMsg" class="text-xs text-gray-500 ml-2"></span>
+          </div>
+          <p id="eSinAssets" class="hidden text-xs text-gray-500 mt-2">La carga de PDF no está disponible en esta vista.</p>
+        </div>
+        <p id="eAct" class="text-[11px] text-gray-500"></p>
+        <p id="eMsg" class="text-xs font-medium min-h-4" role="status"></p>
+      </form>
+      <div class="p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-2">
+        <button onclick="cerrarEditor()" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer">Cancelar</button>
+        <button id="eGuardar" form="editForm" type="submit" class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 cursor-pointer disabled:opacity-50">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visor PDF integrado -->
+  <div id="pdfModal" class="hidden fixed inset-0 bg-slate-950/80 flex items-stretch justify-center p-2 sm:p-4 z-[60]">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl flex flex-col overflow-hidden">
+      <div class="px-3 py-2.5 bg-slate-900 text-white flex flex-wrap items-center gap-2">
+        <i data-lucide="file-text" class="w-5 h-5 text-amber-400 shrink-0"></i>
+        <div class="flex-1 min-w-0">
+          <p id="pTitulo" class="font-semibold text-sm truncate"></p>
+          <p id="pSub" class="text-[11px] text-slate-400 truncate"></p>
+        </div>
+        <div class="flex items-center gap-1">
+          <button onclick="zoomPdf(-1)" aria-label="Alejar" class="p-1.5 rounded hover:bg-slate-800 cursor-pointer"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
+          <span id="pZoom" class="num text-xs w-11 text-center text-slate-300">100%</span>
+          <button onclick="zoomPdf(1)" aria-label="Acercar" class="p-1.5 rounded hover:bg-slate-800 cursor-pointer"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
+          <span id="pPags" class="num text-xs text-slate-400 px-2"></span>
+        </div>
+        <button id="pBajar" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-medium cursor-pointer"><i data-lucide="download" class="w-3.5 h-3.5"></i>Descargar PDF</button>
+        <button onclick="cerrarPdf()" aria-label="Cerrar visor" class="p-1.5 rounded hover:bg-slate-800 cursor-pointer"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <p id="pMsg" class="hidden px-4 py-2 text-xs bg-amber-50 text-amber-900 border-b border-amber-200"></p>
+      <div id="pCont" class="flex-1 overflow-auto bg-slate-200 p-3 flex flex-col items-center gap-3"></div>
+    </div>
+  </div>
+
+  <!-- Botón flotante: buzón (estaciones / auditores) -->
+  <button id="btnPregFlot" onclick="abrirFormulario()" title="Solicitar un documento o hacer una pregunta a Normatividad" class="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 px-4 py-3 rounded-full shadow-lg bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold cursor-pointer">
+    <i data-lucide="inbox" class="w-5 h-5"></i><span>Buzón de Normatividad</span><span id="flotCont" hidden class="text-[11px] bg-white text-teal-700 rounded-full px-1.5"></span>
+  </button>
+
+  <!-- Modal buzón -->
+  <div id="pregModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50" onclick="if(event.target===this)cerrar('pregModal')">
+    <div class="bg-white rounded-xl shadow-xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="p-4 bg-teal-900 text-white flex justify-between items-center">
+        <div class="flex items-center gap-2"><i data-lucide="inbox" class="w-5 h-5 text-teal-300"></i><h3 class="font-bold text-base">Buzón de documentación de Normatividad</h3></div>
+        <button onclick="cerrar('pregModal')" aria-label="Cerrar" class="text-teal-300 hover:text-white cursor-pointer"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div class="p-5 overflow-y-auto space-y-4">
+        <p class="text-xs text-slate-600">Su solicitud queda registrada en el tablero. Normatividad la revisa y le envía el documento o la respuesta al correo que indique.</p>
+        <fieldset class="flex gap-2 text-sm">
+          <label class="flex-1 flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 cursor-pointer has-[:checked]:border-teal-500 has-[:checked]:bg-teal-50"><input type="radio" name="qTipo" value="documento" checked onchange="ajustarTipo()"> Solicitar documento</label>
+          <label class="flex-1 flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 cursor-pointer has-[:checked]:border-teal-500 has-[:checked]:bg-teal-50"><input type="radio" name="qTipo" value="pregunta" onchange="ajustarTipo()"> Hacer una pregunta</label>
+        </fieldset>
+        <label class="block text-xs font-semibold text-slate-700">Estación que solicita
+          <select id="qEst" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-normal bg-white"></select></label>
+        <label class="block text-xs font-semibold text-slate-700"><span id="qReqLbl">Documento solicitado</span>
+          <select id="qReq" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-normal bg-white"></select></label>
+        <label class="block text-xs font-semibold text-slate-700"><span id="qTextoLbl">Detalle de la solicitud</span>
+          <textarea id="qTexto" rows="4" maxlength="2000" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-normal focus:outline-hidden focus:ring-2 focus:ring-teal-400"></textarea></label>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <label class="block text-xs font-semibold text-slate-700">Nombre de quien solicita
+            <input id="qNombre" maxlength="120" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-normal"></label>
+          <label class="block text-xs font-semibold text-slate-700">Correo para enviarle el documento
+            <input id="qCorreo" type="email" maxlength="160" placeholder="nombre@empresa.com" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-normal"></label>
+        </div>
+        <p id="qMsg" class="text-xs font-medium min-h-4" role="status"></p>
+        <div id="qPropias" hidden>
+          <p class="text-[11px] text-gray-500 font-semibold uppercase tracking-wider mb-2">Mis solicitudes</p>
+          <ul id="qPropiasLista" class="divide-y divide-gray-100 border border-gray-200 rounded-lg text-sm"></ul>
+        </div>
+      </div>
+      <div class="p-4 bg-gray-50 border-t border-gray-100 flex flex-wrap justify-end gap-2">
+        <button onclick="cerrar('pregModal')" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer">Cerrar</button>
+        <button id="qEnviar" onclick="enviarPregunta()" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 cursor-pointer disabled:opacity-50"><i data-lucide="send" class="w-4 h-4"></i>Enviar al buzón</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal CSV -->
+  <div id="csvModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50" onclick="if(event.target===this)cerrar('csvModal')">
+    <div class="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+      <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+        <div class="flex items-center gap-2"><i data-lucide="table" class="w-5 h-5 text-emerald-400"></i><h3 class="font-bold text-base">Matriz en formato CSV</h3></div>
+        <button onclick="cerrar('csvModal')" aria-label="Cerrar" class="text-gray-400 hover:text-white cursor-pointer"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div class="p-4 space-y-3 overflow-y-auto">
+        <p class="text-xs text-gray-600">Copie el contenido y péguelo en Excel (celda A1). Si las columnas no se separan, use <em>Datos › Texto en columnas › Delimitado por comas</em>.</p>
+        <textarea id="csvText" readonly class="w-full h-72 border border-gray-300 rounded-lg p-3 text-[11px] font-mono text-slate-700 bg-gray-50"></textarea>
+      </div>
+      <div class="p-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center gap-2">
+        <span id="csvMsg" class="text-xs text-emerald-700 font-medium"></span>
+        <button onclick="copiar(document.getElementById('csvText').value, document.getElementById('csvMsg'), 'CSV copiado al portapapeles', document.getElementById('csvText'))" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 cursor-pointer"><i data-lucide="copy" class="w-4 h-4"></i> Copiar CSV</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <div id="loginModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50" onclick="if(event.target===this)cerrar('loginModal')">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full overflow-hidden">
+      <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+        <div class="flex items-center gap-2"><i data-lucide="lock" class="w-5 h-5 text-amber-400"></i><h3 class="font-bold text-base">Acceso Normatividad</h3></div>
+        <button onclick="cerrar('loginModal')" aria-label="Cerrar" class="text-gray-400 hover:text-white cursor-pointer"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <form id="loginForm" class="p-5 flex flex-col gap-3 text-sm" onsubmit="event.preventDefault(); entrar();">
+        <label class="flex flex-col gap-1 text-xs font-medium text-slate-700">Correo<input id="lgCorreo" type="email" required autocomplete="username" class="border border-gray-300 rounded-lg px-3 py-2 text-sm"></label>
+        <label class="flex flex-col gap-1 text-xs font-medium text-slate-700">Contraseña<input id="lgPass" type="password" required autocomplete="current-password" class="border border-gray-300 rounded-lg px-3 py-2 text-sm"></label>
+        <p id="lgMsg" class="text-xs text-slate-500">Solo administradores de Normatividad. Los auditores no necesitan iniciar sesión.</p>
+        <button type="submit" class="px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium cursor-pointer">Entrar</button>
+      </form>
+    </div>
+  </div>
+
+<script>
+// Respaldo local: se reemplaza con la tabla estaciones de Supabase al cargar.
+let ESTACIONES = [
+ {
+  "id": "e1156",
+  "clave": "1156",
+  "name": "Clara",
+  "razon": "Distribuidora Clara, S.A. de C.V.",
+  "permiso": "PL/13620/EXP/ES/2016",
+  "direccion": "Av. Paseo Triunfo de la Republica No. 935, Partido Doblado, Juarez, Chihuahua. C.P: 32320",
+  "obs": ""
+ },
+ {
+  "id": "e9733",
+  "clave": "9733",
+  "name": "Ejército Nacional",
+  "razon": "Distribuidora Gaso Mex, S.A. de C.V.",
+  "permiso": "PL/12841/EXP/ES/2015",
+  "direccion": "Ave. Ejercito Nacional No. 10151, Partido Senecu, Juarez, Chihuahua, C.P.: 32543",
+  "obs": ""
+ },
+ {
+  "id": "e1159",
+  "clave": "1159",
+  "name": "Fuentes",
+  "razon": "Distribuidora Gaso Mex, S.A. de C.V.",
+  "permiso": "PL/13074/EXP/ES/2016",
+  "direccion": "Av. Paseo Triunfo De La Republica N 394, Partido Doblado, Juarez, Chihuahua, C.P.: 32320",
+  "obs": ""
+ },
+ {
+  "id": "e12097",
+  "clave": "12097",
+  "name": "Santiago Troncoso",
+  "razon": "Distribuidora Gaso Mex, S.A. de C.V.",
+  "permiso": "PL/12843/EXP/ES/2015",
+  "direccion": "Av. Santiago Troncoso No. 1701, Urbivilla Bonita, Juarez, Chihuahua,C.P.:32550",
+  "obs": ""
+ },
+ {
+  "id": "e4457",
+  "clave": "4457",
+  "name": "Satélite",
+  "razon": "Distribuidora Gaso Mex, S.A. de C.V.",
+  "permiso": "PL/12840/EXP/ES/2015",
+  "direccion": "Blvd. Juarez Porvenir No. 1725, S/C, Juarez, Chihuahua. C.P.: 31857",
+  "obs": ""
+ },
+ {
+  "id": "e10141",
+  "clave": "10141",
+  "name": "Solís",
+  "razon": "Distribuidora Gaso Mex, S.A. de C.V.",
+  "permiso": "PL/12842/EXP/ES/2015",
+  "direccion": "Av. Leonardo Solis Barraza No. 2205, Fraccionamiento Urbi Villa Del Prado, Juarez, Chihuahua, C.P.: 32000",
+  "obs": ""
+ },
+ {
+  "id": "e9235",
+  "clave": "9235",
+  "name": "Aeronáutica",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/19424/EXP/ES/2016",
+  "direccion": "Avenida Aeronáutica número 7023, Fraccionamiento Jardines del Aeropuerto, C. P. 32695",
+  "obs": "El domicilio no indica municipio ni estado. Completar como aparece en el título."
+ },
+ {
+  "id": "e9893",
+  "clave": "9893",
+  "name": "Anapra",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/20039/EXP/ES/2017",
+  "direccion": "Boulevard Bernardo Norzagaray 7270, Felipe Ángeles, C. P. 32100, Juárez, Chihuahua.",
+  "obs": ""
+ },
+ {
+  "id": "e5465",
+  "clave": "5465",
+  "name": "Aztecas",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/9938/EXP/ES/2015",
+  "direccion": "Av. De Los Aztecas No. 7821, José María Morelos, Juárez. Chihuahua, C.P. 32670",
+  "obs": ""
+ },
+ {
+  "id": "e9885",
+  "clave": "9885",
+  "name": "Custodia",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/19423/EXP/ES/2016",
+  "direccion": "Custodia de la Republica número 1015, Fray Garcia de San Francisco, C. P. 32575, Juárez, Chihuahua",
+  "obs": ""
+ },
+ {
+  "id": "e9191",
+  "clave": "9191",
+  "name": "Electrolux",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/9941/EXP/ES/2015",
+  "direccion": "Av. Paseo Del Sur No. 105, Fracc. Paraje Del Sur , Cd. Juárez. Chihuahua C.P. 32030",
+  "obs": ""
+ },
+ {
+  "id": "e4179",
+  "clave": "4179",
+  "name": "Gemela Chica",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/761/EXP/ES/2015",
+  "direccion": "Av. Rafael Pérez Serna No. 676, Col. Partido Romero, Juárez. Chihuahua C.P. 32330",
+  "obs": ""
+ },
+ {
+  "id": "e4188",
+  "clave": "4188",
+  "name": "Gemela Grande",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/19422/EXP/ES/2016",
+  "direccion": "Av. Rafael Pérez Serna No. 755, Col. Partido Romero, Juárez. Chihuahua C.P. 32030",
+  "obs": "Verificar el código postal del domicilio (32030 o 32330) contra el título y la LAU."
+ },
+ {
+  "id": "e23214",
+  "clave": "23214",
+  "name": "Hermanos Escobar",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/23214/EXP/ES/2020",
+  "direccion": "Avenida Hermanos Escobar No. 3204, Col. La Playa, Juarez, Chihuahua, C.P. 32317",
+  "obs": ""
+ },
+ {
+  "id": "e1149",
+  "clave": "1149",
+  "name": "Lerdo",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/748/EXP/ES/2015",
+  "direccion": "Ignacio Mejia No. 317, Col. Centro, Juarez, Chihuahua. C.P.: 32160",
+  "obs": ""
+ },
+ {
+  "id": "e2526",
+  "clave": "2526",
+  "name": "López Mateos",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/760/EXP/ES/2015",
+  "direccion": "Av. Adolfo López Mateos No. 1604, Col. Melchor Ocampo, Juárez. Chihuahua C.P. 32380",
+  "obs": ""
+ },
+ {
+  "id": "e7167",
+  "clave": "7167",
+  "name": "Miguel de la Madrid",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/793/EXP/ES/2015",
+  "direccion": "Av. Miguel De La Madrid No. 7675 Col. Heroes De La Revolucion, Juárez. Chihuahua C.P. 32696",
+  "obs": ""
+ },
+ {
+  "id": "e6410",
+  "clave": "6410",
+  "name": "Misiones",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/775/EXP/ES/2015",
+  "direccion": "Av. Paseo De La Victoria No. 4420 Col. Bosques Del Sol, Juárez. Chihuahua C.P. 32617",
+  "obs": ""
+ },
+ {
+  "id": "e5317",
+  "clave": "5317",
+  "name": "Municipio Libre",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/776/EXP/ES/2015",
+  "direccion": "Av. Municipio Libre No. 88 y Esq. Libertad, Col. Adición Sur, Juárez. Chihuahua C.P. 32000",
+  "obs": ""
+ },
+ {
+  "id": "e2172",
+  "clave": "2172",
+  "name": "Parral",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/4201/EXP/ES/2015",
+  "direccion": "Av. Tecnologico N 29, Tecnologico, Hidalgo del Parral, C.P. 33850",
+  "obs": ""
+ },
+ {
+  "id": "e8244",
+  "clave": "8244",
+  "name": "Permuta",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/794/EXP/ES/2015",
+  "direccion": "Av. Manuel Talamas Camandary No. 850 Col. Manuel Gomez Morin, Juárez. Chihuahua C.P. 32575",
+  "obs": ""
+ },
+ {
+  "id": "e6947",
+  "clave": "6947",
+  "name": "Puerto de Palos",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/790/EXP/ES/2015",
+  "direccion": "Av. Puerto de Palos No. 1050 Col. Tierra Nueva Juárez. Chihuahua, C.P. 32300",
+  "obs": ""
+ },
+ {
+  "id": "e1163",
+  "clave": "1163",
+  "name": "Tecnológico",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/9444/EXP/ES/2015",
+  "direccion": "Carretera Panamericana No. 3130, Del Marquez, Juarez, Chihuahua, C.P: 32610",
+  "obs": ""
+ },
+ {
+  "id": "e5716",
+  "clave": "5716",
+  "name": "Travel Center",
+  "razon": "Díaz Gas, S.A. de C.V.",
+  "permiso": "PL/24938/EXP/ES/2023",
+  "direccion": "Carr. Panamericana No. 331, Col. Ex Hacienda de Samalayuca. C.P. 32370, Juárez, Chihuahua",
+  "obs": ""
+ },
+ {
+  "id": "e11007",
+  "clave": "11007",
+  "name": "Independencia",
+  "razon": "Estación Custodia, S.A. de C.V.",
+  "permiso": "PL/11393/EXP/ES/2015",
+  "direccion": "Ave. Independencia 1839-D, Trojes de Alonso, Aguascalientes, Aguascalientes, C.P. 20116",
+  "obs": ""
+ },
+ {
+  "id": "e5170",
+  "clave": "5170",
+  "name": "Plutarco",
+  "razon": "Estación Custodia, S.A. de C.V.",
+  "permiso": "PL/2060/EXP/ES/2015",
+  "direccion": "Av. Plutarco Elias Calles No. 2260, Fracc. Partido Iglesias, Juarez. Chihuahua C.P. 32528",
+  "obs": ""
+ },
+ {
+  "id": "e12442",
+  "clave": "12442",
+  "name": "Gabriela Mistral",
+  "razon": "Formula Gas, S.A. de C.V.",
+  "permiso": "PL/3340/EXP/ES/2015",
+  "direccion": "AV. GABRIELA MISTRAL NO. 100, FRACCIONAMIENTO LA ESTRELLA, Aguascalientes, CP 20150, Aguascalientes",
+  "obs": ""
+ },
+ {
+  "id": "e1242",
+  "clave": "1242",
+  "name": "Villa Ahumada",
+  "razon": "Gasolinera Villa Ahumada, S.A. de C.V.",
+  "permiso": "PL/5114/EXP/ES/2015",
+  "direccion": "Av. Miguel Ahumada Norte S/N, Centro, Ahumada, 32800, Chihuahua",
+  "obs": "",
+  "ficha": [
+   [
+    "Resolución",
+    "RES/698/2015 (22 oct 2015)"
+   ],
+   [
+    "Entrada en vigor",
+    "1 ene 2016 · vigencia de 30 años"
+   ],
+   [
+    "Tipo de estación",
+    "Fin específico"
+   ],
+   [
+    "Módulos despachadores",
+    "5"
+   ],
+   [
+    "Productos",
+    "Gasolina Magna, Gasolina Premium y Diésel"
+   ],
+   [
+    "No. de estación Pemex",
+    "E01242"
+   ],
+   [
+    "Inicio de operaciones",
+    "15 sep 1997"
+   ],
+   [
+    "Telemedición",
+    "Sí, según condición 3"
+   ]
+  ]
+ },
+ {
+  "id": "e13792",
+  "clave": "13792",
+  "name": "Colosio",
+  "razon": "Grupo Operador Gasolinero TSA del Centro, S.A. de C.V.",
+  "permiso": "PL/22600/EXP/ES/2019",
+  "direccion": "Avenida Monte Blanco, No. 604, Col. Fracc. Villas de San Nicolás, C. P. 20115 Aguascalientes, Aguascalientes",
+  "obs": ""
+ },
+ {
+  "id": "e15091",
+  "clave": "15091",
+  "name": "Jesús María",
+  "razon": "Grupo Operador Gasolinero TSA del Centro, S.A. de C.V.",
+  "permiso": "PL/25891/EXP/ES/2024",
+  "direccion": "Paseo de los Chicahuales, Núm. 196, Col. Deportiva, C.P. 20924, Jesus Maria, Aguascalientes",
+  "obs": ""
+ },
+ {
+  "id": "e15071",
+  "clave": "15071",
+  "name": "Puertecito",
+  "razon": "Grupo Operador Gasolinero TSA del Centro, S.A. de C.V.",
+  "permiso": "PL/25627/EXP/ES/2024",
+  "direccion": "16 de septiembre, Núm. 108-A. Col. El Puertecito de la Virgen. C.P. 20320, San Franciscos de los Romo, Aguascalientes",
+  "obs": ""
+ },
+ {
+  "id": "e14946",
+  "clave": "14946",
+  "name": "San Rafael",
+  "razon": "Grupo Operador Gasolinero TSA del Centro, S.A. de C.V.",
+  "permiso": "PL/24816/EXP/ES/2023",
+  "direccion": "Av. Convención de 1914 Nte. No. 1904, Col. Olivares Santana, C. P. 20010, Aguascalientes, Aguascalientes",
+  "obs": ""
+ },
+ {
+  "id": "e3184",
+  "clave": "3184",
+  "name": "Praxedis",
+  "razon": "Héctor Armandino Fierro Holguín",
+  "permiso": "PL/10702/EXP/ES/2015",
+  "direccion": "AV MORELOS N S/N, PRAXEDIS, Praxedis G. Guerrero, Chihuahua, C. P. 32780",
+  "obs": ""
+ },
+ {
+  "id": "e1148",
+  "clave": "1148",
+  "name": "El Jarudo",
+  "razon": "Servicio El Jarudo, S.A. de C.V.",
+  "permiso": "PL/13624/EXP/ES/2016",
+  "direccion": "Blvd Oscar Flores Sanchez N 3845, Acacias, Juarez, Chihuahua. C.P.: 32630",
+  "obs": ""
+ },
+ {
+  "id": "e1376",
+  "clave": "1376",
+  "name": "Delicias",
+  "razon": "Servicio SYC, S.A. de C.V.",
+  "permiso": "PL/10059/EXP/ES/2015",
+  "direccion": "Blvd. Oscar Flores Norte No. 514, Centro, Delicias, Chihuahua, C.P. 33000",
+  "obs": ""
+ },
+ {
+  "id": "e12900",
+  "clave": "12900",
+  "name": "El Castaño",
+  "razon": "Servicios Gasolineros El Castaño, S.A. de C.V.",
+  "permiso": "PL/19190/EXP/ES/2016",
+  "direccion": "Av. De la Convencion de 1914 Num. 1125, las Torres, C.P. 20229 Aguascalientes, Aguascalientes",
+  "obs": ""
+ },
+ {
+  "id": "e24499",
+  "clave": "24499",
+  "name": "SMA Picachos",
+  "razon": "Sma Picachos, S.A. de C.V.",
+  "permiso": "PL/24499/EXP/ES/2022",
+  "direccion": "Carretera San Miguel de Allende a Queretaro, Kilometro 1.00, Col. San Jose de la Posta, C.P. 37780",
+  "obs": ""
+ },
+ {
+  "id": "e24500",
+  "clave": "24500",
+  "name": "SMA Ventanas",
+  "razon": "Sma Ventanas, S.A. de C.V.",
+  "permiso": "PL/24500/EXP/ES/2022",
+  "direccion": "Carretera San Miguel de Allende a Dolores Hidalgo, Km. 2 y 2.5, Col. Club de Golf Ventanas, C.P. 37718",
+  "obs": ""
+ }
+];
+
+const FECHA_CARGA = new Date().toISOString().slice(0,10);
+const REQUERIMIENTOS = [
+  "PERMISO DE EXPENDIO CRE / CNE", "LICENCIA DE FUNCIONAMIENTO AMBIENTAL", "INFORME PREVENTIVO",
+  "REGISTRO GENERADOR DE RESIDUOS PELIGROSOS", "DICTAMEN VERIFICACION ELECTRICA",
+  "DICTAMEN NOM-005-ASEA-2016", "CEDULA DE OPERACION ANUAL (COA)", "AVISO DE CONTROL A DISTANCIA",
+  "PROGRAMA INTERNO DE PROTECCION CIVIL", "PRUEBAS DE HERMETICIDAD", "AUTORIZACION SASISOPA",
+  "INFORMES ANUALES DE RENDIMIENTO SASISOPA", "SISTEMA DE GESTION DE MEDICION",
+  "CERTIFICADO ANEXO 21 SAT", "LICENCIAS DE FUNCIONAMIENTO MUNICIPAL", "LICENCIAS DE USO DE SUELO",
+  "PERMISO DESCARGA DE AGUAS RESIDUALES", "PAGO SUPERVISION ANUAL CRE / CNE", "ESTUDIO DE TIERRAS FISICAS",
+  "ESTUDIO DE ILUMINACION"
+];
+const FUNDAMENTOS = [{"a": "CNE", "t": "El expendio al público de petrolíferos requiere permiso vigente. Desde la Ley del Sector Hidrocarburos (DOF 18/03/2025) los permisos los otorga y supervisa la Comisión Nacional de Energía (CNE), que sustituyó a la CRE. Los permisos de la CRE siguen vigentes en sus términos. La Guía de Obligaciones de la CNE (Petrolíferos, actualizada a marzo de 2026) enlista las obligaciones del permisionario conforme a los arts. 119 y 121 LSH.", "f": [["Ley del Sector Hidrocarburos (Cámara de Diputados)", "https://www.diputados.gob.mx/LeyesBiblio/ref/lsh.htm"], ["Guía de Obligaciones CNE · Petrolíferos", "https://www.cne.gob.mx/DOCUMENTOS%20CNE/Guias%20de%20Obligaciones%20para%20Personas%20Permisionarias/Gu%C3%ADa%20de%20obligaciones%20del%20Sector%20Petrol%C3%ADferos.pdf"]], "c": false}, {"a": "ASEA", "t": "La ASEA regula en materia ambiental las instalaciones del sector hidrocarburos. La licencia ambiental de funcionamiento integra las obligaciones en emisiones a la atmósfera (LGEEPA art. 111 Bis y su Reglamento). El ACUERDO de simplificación de trámites de la ASEA (DOF 05/11/2025) modificó trámites de la Agencia. Confirmar en la ficha del trámite vigente la homoclave y los requisitos aplicables a cada estación.", "f": [["LGEEPA (Cámara de Diputados)", "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGEEPA.pdf"], ["DOF 05/11/2025 · Acuerdo de simplificación de trámites ASEA", "https://www.dof.gob.mx/nota_detalle.php?codigo=5771951&fecha=05/11/2025"]], "c": true}, {"a": "ASEA", "t": "Las obras del sector hidrocarburos requieren autorización en materia de impacto ambiental (LGEEPA art. 28). Cuando la obra está prevista en NOM o planes que regulan sus impactos, procede el Informe Preventivo en lugar de la Manifestación (LGEEPA art. 31 y Reglamento en materia de Evaluación del Impacto Ambiental, arts. 29 a 33). Para el sector hidrocarburos lo evalúa y resuelve la ASEA.", "f": [["LGEEPA, arts. 28 y 31 (Cámara de Diputados)", "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGEEPA.pdf"], ["Reglamento LGEEPA en materia de EIA (Cámara de Diputados)", "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGEEPA_MEIA_311014.pdf"]], "c": false}, {"a": "ASEA", "t": "Quien genera residuos peligrosos (estopas, lodos de tanques, aceites, filtros) debe registrarse como generador y cumplir según su categoría (LGPGIR arts. 40, 43, 44 y 46, y su Reglamento). En el sector hidrocarburos el registro y la supervisión corresponden a la ASEA.", "f": [["Ley General para la Prevención y Gestión Integral de los Residuos (Cámara de Diputados)", "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPGIR.pdf"]], "c": false}, {"a": "SENER / ASEA", "t": "La instalación eléctrica debe cumplir la NOM-001-SEDE-2012 (DOF 29/11/2012). Su cumplimiento se acredita con el dictamen de una Unidad de Verificación de Instalaciones Eléctricas (UVIE). La NOM-005-ASEA-2016 remite a esa norma para las instalaciones eléctricas de la estación. Confirmar la periodicidad exigible para cada estación (alta, modificación o dictamen periódico).", "f": [["NOM-005-ASEA-2016 (Plataforma de normas · Economía)", "https://platiica.economia.gob.mx/normalizacion/nom-005-asea-2016/"]], "c": true}, {"a": "ASEA / CNE", "t": "La NOM-005-ASEA-2016 (DOF 07/11/2016) regula el diseño, construcción, operación y mantenimiento de estaciones de servicio de diésel y gasolinas. El cumplimiento en operación y mantenimiento se acredita con un dictamen anual de un tercero aprobado por la ASEA. Según la Guía de Obligaciones de la CNE, el dictamen se entrega a la CNE del 1 al 10 de abril de cada año.", "f": [["NOM-005-ASEA-2016 (Plataforma de normas · Economía)", "https://platiica.economia.gob.mx/normalizacion/nom-005-asea-2016/"], ["Guía de Obligaciones CNE · Petrolíferos", "https://www.cne.gob.mx/DOCUMENTOS%20CNE/Guias%20de%20Obligaciones%20para%20Personas%20Permisionarias/Gu%C3%ADa%20de%20obligaciones%20del%20Sector%20Petrol%C3%ADferos.pdf"]], "c": false}, {"a": "ASEA", "t": "Los establecimientos sujetos a reporte presentan la Cédula de Operación Anual con la información del ejercicio anterior: emisiones, residuos y transferencia de contaminantes (LGEEPA art. 109 Bis). Conforme al Reglamento LGEEPA en materia de RETC, art. 11, se presenta del 1 de marzo al 30 de junio de cada año. Para el sector hidrocarburos se presenta ante la ASEA.", "f": [["Reglamento LGEEPA en materia de RETC (Cámara de Diputados)", "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LGEEPA_MRETC_311014.pdf"]], "c": false}, {"a": "PROFECO", "t": "Aviso de sistemas de monitoreo y control a distancia de la estación (consola de inventarios, interfase de dispensarios y programa de controles volumétricos), presentado ante la PROFECO; en la red se presentaron entre diciembre de 2025 y enero de 2026. Falta confirmar en fuente oficial el fundamento específico y si debe actualizarse cuando cambian los equipos.", "f": [], "c": true}, {"a": "Protección Civil", "t": "Los inmuebles con afluencia de personas o actividades de riesgo deben contar con un Programa Interno de Protección Civil (Ley General de Protección Civil, art. 39, y la ley estatal y el reglamento municipal aplicables). La revisión y el visto bueno corresponden a la Coordinación Estatal o Municipal de Protección Civil. Verificar el texto vigente de la ley general y la periodicidad que fija la autoridad local.", "f": [["Ley General de Protección Civil (Cámara de Diputados)", "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGPC.pdf"]], "c": true}, {"a": "ASEA", "t": "La NOM-005-ASEA-2016 exige pruebas de hermeticidad a tanques y tuberías. Para tuberías, el numeral 8.10.1 pide una prueba inicial, otra a los 5 años y una anual a partir del sexto año. El numeral 8.5.1 no fija periodicidad para tanques. Las pruebas las realiza un laboratorio acreditado y se conservan como evidencia para el dictamen anual.", "f": [["NOM-005-ASEA-2016 (Plataforma de normas · Economía)", "https://platiica.economia.gob.mx/normalizacion/nom-005-asea-2016/"]], "c": false}, {"a": "ASEA", "t": "Los regulados deben contar con un Sistema de Administración de Seguridad Industrial, Seguridad Operativa y Protección al Medio Ambiente (SASISOPA) autorizado por la ASEA (Ley de la ASEA, art. 13). El procedimiento lo fijan las DACG de SASISOPA para expendio al público y distribución, modificadas por ACUERDO publicado en el DOF el 02/08/2018. Incluyen la conformación, la autorización y la auditoría externa al menos cada dos años.", "f": [["ASEA · SASISOPA para expendio y distribución al público", "https://www.gob.mx/asea"], ["Ley de la ASEA (Cámara de Diputados)", "https://www.diputados.gob.mx/LeyesBiblio/pdf/LANSI.pdf"]], "c": false}, {"a": "ASEA", "t": "Una vez autorizado el SASISOPA, las DACG obligan al regulado a reportar a la ASEA el desempeño e implementación del sistema en los plazos y medios que señala la Agencia. El informe de auditoría externa se presenta dentro de los 20 días hábiles siguientes a su conclusión. Confirmar en la plataforma de la ASEA el calendario vigente del informe anual.", "f": [["ASEA · SASISOPA para expendio y distribución al público", "https://www.gob.mx/asea"]], "c": true}, {"a": "CNE", "t": "Los permisionarios deben contar con un Sistema de Gestión de Medición y cumplir los lineamientos de medición (LSH arts. 119 y 121; Reglamento LSH arts. 95, 156 y 160; DACG en materia de medición, RES/811/2015), según la Guía de Obligaciones de la CNE.", "f": [["Guía de Obligaciones CNE · Petrolíferos", "https://www.cne.gob.mx/DOCUMENTOS%20CNE/Guias%20de%20Obligaciones%20para%20Personas%20Permisionarias/Gu%C3%ADa%20de%20obligaciones%20del%20Sector%20Petrol%C3%ADferos.pdf"]], "c": false}, {"a": "SAT", "t": "Quienes expenden petrolíferos llevan controles volumétricos (CFF, art. 28, fr. I) con equipos y programas que cumplen los Anexos 21 y 22 de la RMF. Según el SAT, el certificado de correcta operación y funcionamiento se obtiene anualmente y se envía a más tardar el 31 de diciembre. El dictamen de calidad del petrolífero se envía trimestralmente, conforme a las reglas 2.6.1.2, 2.6.1.5 y 2.6.1.6.", "f": [["SAT · Obligaciones de controles volumétricos", "https://www.sat.gob.mx/minisitio/ControlesVolumetricos/obligaciones.html"], ["Anexo 21 RMF 2026 (SAT)", "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rmf/anexos/Anexo_21_RMF2026-13012026.pdf"]], "c": false}, {"a": "Municipio", "t": "La licencia de funcionamiento la expide el municipio de cada estación conforme a su reglamento de comercio y a su ley de ingresos anual. La vigencia y el refrendo dependen de cada municipio. El costo estimado de este tablero usa la UMA vigente. Verificar el reglamento y la ley de ingresos del municipio de cada estación.", "f": [], "c": true}, {"a": "Municipio / Estado", "t": "El uso de suelo para estación de servicio se acredita con la licencia o constancia que expide el municipio conforme a la Ley General de Asentamientos Humanos, Ordenamiento Territorial y Desarrollo Urbano, la ley estatal y el plan de desarrollo urbano municipal. Por lo general no tiene vencimiento, salvo condición expresa en la propia licencia.", "f": [["LGAHOTDU (Cámara de Diputados)", "https://www.diputados.gob.mx/LeyesBiblio/pdf/LGAHOTDU.pdf"]], "c": true}, {"a": "Organismo operador / CONAGUA", "t": "Si la descarga va al alcantarillado municipal, el permiso lo otorga el organismo operador (por ejemplo, la Junta Municipal de Agua y Saneamiento), con los límites de la NOM-002-SEMARNAT-1996. Si descarga a cuerpos o bienes nacionales, se requiere permiso de la CONAGUA (Ley de Aguas Nacionales, art. 88) y se aplica la NOM-001-SEMARNAT-2021.", "f": [["Ley de Aguas Nacionales (Cámara de Diputados)", "https://www.diputados.gob.mx/LeyesBiblio/pdf/LAN.pdf"]], "c": true}, {"a": "CNE", "t": "Los permisionarios pagan cada año el aprovechamiento por supervisión del permiso, a más tardar el 31 de enero. Se paga con la hoja de ayuda e5cinco y se acredita ante la CNE presentando el comprobante. Fundamento: Ley de Ingresos de la Federación y oficio de la SHCP sobre aprovechamientos; art. 4 LFD; LSH, arts. 89 fr. VII y 119 frs. VI, XV y XXI; LCNE, arts. 7 frs. VI, IX y X, y 27, según la Guía de Obligaciones de la CNE.", "f": [["Guía de Obligaciones CNE · Petrolíferos", "https://www.cne.gob.mx/DOCUMENTOS%20CNE/Guias%20de%20Obligaciones%20para%20Personas%20Permisionarias/Gu%C3%ADa%20de%20obligaciones%20del%20Sector%20Petrol%C3%ADferos.pdf"]], "c": false}, {"a": "STPS", "t": "La NOM-022-STPS-2015 (DOF 01/04/2016) obliga a medir la resistencia de la red de puesta a tierra y comprobar la continuidad eléctrica al menos cada doce meses (numerales 5.3, 7.2 inciso c y 12.3). Los límites son 10 ohms para pararrayos y 25 ohms para la red de tierras. Las mediciones se registran conforme al numeral 9.5.", "f": [["NOM-022-STPS-2015 (Plataforma de normas · Economía)", "https://platiica.economia.gob.mx/normalizacion/nom-022-stps-2015/"]], "c": false}, {"a": "STPS", "t": "La NOM-025-STPS-2008 obliga a hacer el reconocimiento de las condiciones de iluminación y la evaluación de los niveles en las áreas de trabajo (numerales 5.3 y 5.5), y a conservar el informe correspondiente. Confirmar en el texto oficial la periodicidad de la nueva evaluación (cuando cambian áreas, tareas o luminarias).", "f": [["NOM-025-STPS-2008 · normas STPS en el DOF", "https://dof.gob.mx/normasOficiales/3581/stps/stps.htm"]], "c": true}];
+const FUND_CONSULTA = "9 nov 2026";
+function fundHTML(ri){ const x=FUNDAMENTOS[ri]; if(!x) return ""; return `<p class="leading-relaxed">${esc(x.t)}</p>${x.f.length?`<ul class="mt-2 flex flex-wrap gap-x-4 gap-y-1">${x.f.map(([n,u])=>`<li><a href="${esc(u)}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-teal-700 hover:text-teal-900 underline underline-offset-2"><i data-lucide="external-link" class="w-3 h-3"></i>${esc(n)}</a></li>`).join("")}</ul>`:""}<p class="mt-2 text-[10px] text-slate-400">Fuentes consultadas el ${FUND_CONSULTA}.${x.c?' Hay puntos por confirmar.':''}</p>`; }
+function pintarFund(){ const ri=reqIdx(), x=FUNDAMENTOS[ri], b=document.getElementById("fundReq"); if(!b||!x) return; b.querySelector("[data-t]").textContent=REQUERIMIENTOS[ri]; b.querySelector("[data-a]").textContent=x.a; const cf=b.querySelector("[data-c]"); cf.classList.toggle("hidden",!x.c); b.querySelector("[data-b]").innerHTML=fundHTML(ri); }
+const DEPENDENCIAS = [
+  { k: "todas", n: "Todas", r: null },
+  { k: "asea", n: "ASEA", r: [1, 2, 3, 5, 6, 9, 10, 11] },
+  { k: "cne", n: "CNE", r: [0, 12, 17] },
+  { k: "sat", n: "SAT", r: [13] },
+  { k: "profeco", n: "PROFECO", r: [7] },
+  { k: "sener", n: "SENER · UVIE", r: [4] },
+  { k: "stps", n: "STPS", r: [18, 19] },
+  { k: "pc", n: "Protección Civil", r: [8] },
+  { k: "mun", n: "Municipio", r: [14, 15] },
+  { k: "agua", n: "Agua · CONAGUA", r: [16] }
+];
+let DEP = "todas";
+try { const g = localStorage.getItem("dep"); if (DEPENDENCIAS.some(d => d.k === g)) DEP = g; } catch (e) {}
+const reqsDep = () => { const d = DEPENDENCIAS.find(x => x.k === DEP); return d && d.r ? d.r : REQUERIMIENTOS.map((_, i) => i); };
+function llenarReqs() {
+  const sel = document.getElementById("reqFilter"), antes = sel.value, L = reqsDep();
+  sel.innerHTML = L.map(i => `<option value="${i}">${esc(REQUERIMIENTOS[i])}</option>`).join("");
+  sel.value = L.includes(+antes) ? antes : String(L[0]);
+}
+function elegirDep(k) {
+  DEP = k; try { localStorage.setItem("dep", k); } catch (e) {}
+  llenarReqs(); render();
+}
+function pintarDeps() {
+  const nav = document.getElementById("depTabs"); if (!nav) return;
+  nav.innerHTML = DEPENDENCIAS.map(d => {
+    const L = d.r || REQUERIMIENTOS.map((_, i) => i);
+    let ven = 0, ale = 0;
+    L.forEach(i => ESTACIONES.forEach(e => { const k = estatus(e, i).k; if (k === "vencido") ven++; else if (k === "alerta") ale++; }));
+    const act = d.k === DEP;
+    return `<button onclick="elegirDep('${d.k}')" class="shrink-0 cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${act ? "bg-teal-700 border-teal-700 text-white" : "bg-white border-gray-200 text-slate-700 hover:bg-teal-50 hover:border-teal-300"}">
+      ${esc(d.n)} <span class="${act ? "text-teal-100" : "text-slate-400"} font-medium">${L.length}</span>
+      ${ven ? `<span class="bg-red-600 text-white rounded-full px-1.5 text-[10px] font-bold num" title="Vencidos">${ven}</span>` : ""}
+      ${ale ? `<span class="bg-yellow-300 text-yellow-900 rounded-full px-1.5 text-[10px] font-bold num" title="Por vencer en 60 días o menos">${ale}</span>` : ""}
+    </button>`;
+  }).join("");
+}
+const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+
+// ---- Estado de sesión ----
+const S = { downloads: null, db: null, user: null, assets: null, myId: null, puedeEditar: false, verComoAuditor: false, reg: {}, dbListo: false, editando: null, borrador: null };
+const esAdmin = () => S.puedeEditar && !S.verComoAuditor;
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const fFecha = iso => { if (!iso) return ""; const [y,m,d] = iso.slice(0,10).split("-"); return `${+d} ${MESES[+m-1]} ${y}`; };
+const fFechaHora = iso => { const d = new Date(iso); return isNaN(d) ? "" : `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}, ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
+const porId = id => ESTACIONES.find(e => e.id === id);
+const clave = (id, ri) => `${id}__r${ri}`;
+const reqIdx = () => parseInt(document.getElementById("reqFilter").value, 10) || 0;
+
+function restante(iso) {
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const v = new Date(iso + "T00:00:00");
+  const dias = Math.round((v - hoy) / 86400000);
+  let meses = (v.getFullYear() - hoy.getFullYear()) * 12 + (v.getMonth() - hoy.getMonth());
+  if (dias >= 0 && v.getDate() < hoy.getDate()) meses--;
+  const a = Math.floor(Math.abs(meses) / 12), m = Math.abs(meses) % 12;
+  const txt = Math.abs(dias) <= 60 ? `${Math.abs(dias)} días`
+    : [a ? `${a} ${a === 1 ? "año" : "años"}` : "", m ? `${m} ${m === 1 ? "mes" : "meses"}` : ""].filter(Boolean).join(" ") || `${Math.abs(dias)} días`;
+  return { dias, txt };
+}
+
+// Captura vigente: registro del tablero si tiene estatus; si no, dato base del permiso CRE
+function captura(e, ri) {
+  const r = S.reg[clave(e.id, ri)];
+  if (r && r.tipo) return { tipo: r.tipo, fecha: r.fecha || "", origen: "tablero" };
+  return { tipo: "", fecha: "", origen: "" };
+}
+
+function estatus(e, ri) {
+  const c = captura(e, ri);
+  if (c.tipo === "noaplica") return { k: "na", texto: "No aplica", clase: "status-na", detalle: "No aplica a esta estación" };
+  if (c.tipo === "sinvto") return { k: "vigente", texto: "Vigente", clase: "status-vigente", detalle: "Sin fecha de vencimiento" };
+  if (c.tipo === "tramite") return { k: "tramite", texto: "En trámite", clase: "status-tramite", detalle: c.fecha ? `Seguimiento: ${fFecha(c.fecha)}` : "En proceso ante la autoridad" };
+  if (c.tipo === "fecha" && c.fecha) {
+    const r = restante(c.fecha);
+    if (r.dias < 0) return { k: "vencido", texto: "Vencido", clase: "status-vencido", detalle: `Venció hace ${r.txt}`, dias: r.dias, fecha: c.fecha };
+    if (r.dias <= 60) return { k: "alerta", texto: `Vence en ${r.dias} días`, clase: "status-alerta", detalle: `Faltan ${r.txt}`, dias: r.dias, fecha: c.fecha };
+    return { k: "vigente", texto: "Vigente", clase: "status-vigente", detalle: `Faltan ${r.txt}`, dias: r.dias, fecha: c.fecha };
+  }
+  return { k: "pendiente", texto: "Sin capturar", clase: "status-pendiente", detalle: "Sin información registrada" };
+}
+
+const SUBCARPETAS = { 10: ["Autorización", "Acuses de oficios", "Seguimiento"], 11: ["Informes presentados", "Acuses de oficios", "Seguimiento"] };
+const RI_OPE = [10, 11];
+const carpetaDe = (ri, p) => { const L = SUBCARPETAS[ri]; if (!L) return ""; return p && p.carpeta && L.includes(p.carpeta) ? p.carpeta : L[0]; };
+function docsDe(e, ri) {
+  const r = S.reg[clave(e.id, ri)];
+  const subidos = ((r && r.pdfs) || []).map(p => ({ n: p.n, u: urlPdf(p.id), id: p.id, src: "tablero", at: p.at, clase: p.clase || "", carpeta: carpetaDe(ri, p) }));
+  return subidos;
+}
+
+// ---- Estimador de derechos (Licencia de Funcionamiento Municipal, Juárez) ----
+const RI_LFM = 14, RI_IP = 2;
+// Superficie a utilizar (m²) según cada licencia de funcionamiento municipal de Juárez
+const SUP_JUAREZ = { e9191: 6907.97, e1149: 636.68, e2526: 1972.68, e8244: 1843.11, e6410: 1990.72, e7167: 912.76, e6947: 1999.39, e23214: 1119.69, e5317: 1363.37, e4188: 7169.88, e4179: 2159.67, e9235: 5071.61, e9885: 7662.18, e9893: 3849.13, e4457: 6478.23, e10141: 1458.13, e12097: 1600.00, e9733: 12346.00, e5716: 19999.69, e5465: 1640.00, e1148: 1413.10, e1156: 3881.55, e1159: 4362.58, e1163: 2642.00, e5170: 1451.34 };
+const PARAM_DEF = {
+  umas: { "2026": { uma: 117.31, oficial: true } },
+  inflacion: { "2026": 3.90, "2027": 3.86 },
+  tarifa: { hasta100: 10, hasta1000: 15, mas1000: 20 },
+  ajusteAlto: 10, recargoMensual: 1.5,
+  fuente: "UMA 2026 oficial (INEGI). Inflación: mediana de la Encuesta Citi del 20/10/2026 (3.90% cierre 2026; 3.86% cierre 2027)."
+};
+S.param = JSON.parse(JSON.stringify(PARAM_DEF)); S.estAbierto = false;
+
+function umaDe(anio) {
+  const P = S.param, años = Object.keys(P.umas).map(Number).sort((a,b)=>a-b);
+  if (P.umas[anio]) return { uma: +P.umas[anio].uma, oficial: !!P.umas[anio].oficial };
+  const base = años.filter(a => a < anio).pop() ?? años[0];
+  let u = +P.umas[base].uma;
+  for (let y = base; y < anio; y++) u = u * (1 + (+(P.inflacion[y] ?? P.inflacion[Math.max(...Object.keys(P.inflacion).map(Number))] ?? 0)) / 100);
+  return { uma: Math.round(u * 100) / 100, oficial: false };
+}
+const umaEnFecha = d => umaDe(d.getMonth() >= 1 ? d.getFullYear() : d.getFullYear() - 1);
+const tarifaUMA = m2 => m2 <= 100 ? S.param.tarifa.hasta100 : m2 <= 1000 ? S.param.tarifa.hasta1000 : S.param.tarifa.mas1000;
+const mxn = n => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+function mesesEntre(a, b) { let m = (b.getFullYear()-a.getFullYear())*12 + (b.getMonth()-a.getMonth()); if (b.getDate() > a.getDate()) m++; return Math.max(0, m); }
+
+function toggleEstimador() {
+  S.estAbierto = !S.estAbierto;
+  document.getElementById("estCuerpo").hidden = !S.estAbierto;
+  document.getElementById("estChevron").style.transform = S.estAbierto ? "rotate(180deg)" : "";
+  renderEstimador();
+}
+
+function pintarUmas() {
+  const P = S.param, admin = esAdmin();
+  const hoyA = new Date().getFullYear();
+  const años = new Set(Object.keys(P.umas).map(Number));
+  Object.keys(P.inflacion).forEach(a => años.add(+a));
+  for (let y = hoyA - 1; y <= hoyA + 2; y++) años.add(y);
+  const lista = [...años].filter(y => y >= Math.min(...Object.keys(P.umas).map(Number))).sort((a,b)=>a-b);
+  document.getElementById("umaBody").innerHTML = lista.map(y => {
+    const u = umaDe(y), inf = P.inflacion[y];
+    const umaCell = admin ? `<input data-uma="${y}" type="number" step="0.01" value="${P.umas[y] ? P.umas[y].uma : ""}" placeholder="${u.uma.toFixed(2)}" class="w-24 text-right border border-gray-300 rounded px-1.5 py-0.5">` : `<span class="num">${mxn(u.uma)}</span>`;
+    const infCell = admin ? `<input data-inf="${y}" type="number" step="0.01" value="${inf ?? ""}" placeholder="—" class="w-16 text-right border border-gray-300 rounded px-1.5 py-0.5"> %` : (inf != null ? `${(+inf).toFixed(2)} %` : "—");
+    const tag = u.oficial ? `<span class="text-[10px] font-semibold bg-emerald-100 text-emerald-800 rounded px-1.5 py-0.5">Oficial</span>` : `<span class="text-[10px] font-semibold bg-amber-100 text-amber-800 rounded px-1.5 py-0.5">Estimada</span>`;
+    return `<tr class="border-b border-gray-100"><td class="py-1.5 font-semibold">${y}</td><td class="py-1.5 text-right">${umaCell}</td><td class="py-1.5 text-right">${infCell}</td><td class="py-1.5 pl-2">${tag}${admin ? ` <label class="text-[10px] text-slate-500 ml-1"><input data-of="${y}" type="checkbox" ${P.umas[y] && P.umas[y].oficial ? "checked" : ""}> oficial</label>` : ""}</td></tr>`;
+  }).join("");
+  document.getElementById("umaFuente").textContent = P.fuente ? "Fuente: " + P.fuente + (P.actualizado ? ` Actualizado ${fFechaHora(P.actualizado)}.` : "") : "";
+  document.getElementById("umaAdmin").hidden = !admin;
+}
+
+function agregarAnioUma() {
+  const años = Object.keys(S.param.umas).map(Number).concat(Object.keys(S.param.inflacion).map(Number));
+  const y = Math.max(...años, new Date().getFullYear()) + 1;
+  S.param.inflacion[y] = S.param.inflacion[y] ?? null;
+  pintarUmas();
+}
+
+async function guardarParametros() {
+  const msg = document.getElementById("umaMsg");
+  const P = JSON.parse(JSON.stringify(S.param));
+  document.querySelectorAll("[data-uma]").forEach(el => {
+    const y = el.dataset.uma, v = parseFloat(el.value), of = document.querySelector(`[data-of="${y}"]`);
+    if (!isNaN(v) && v > 0) P.umas[y] = { uma: v, oficial: !!(of && of.checked) }; else delete P.umas[y];
+  });
+  document.querySelectorAll("[data-inf]").forEach(el => { const v = parseFloat(el.value); if (!isNaN(v)) P.inflacion[el.dataset.inf] = v; else delete P.inflacion[el.dataset.inf]; });
+  P.ajusteAlto = parseFloat(document.getElementById("pAjuste").value) || 0;
+  P.recargoMensual = parseFloat(document.getElementById("pRecargo").value) || 0;
+  if (!Object.keys(P.umas).length) { msg.textContent = "Captura al menos una UMA."; return; }
+  P.actualizado = new Date().toISOString(); P.actualizadoPor = S.myId || null;
+  msg.textContent = "Guardando…";
+  try { await S.db.doc("config/derechos").set(P); msg.textContent = "Parámetros guardados."; }
+  catch (e) { msg.textContent = "No se pudo guardar (" + (e.code || e.message) + ")."; }
+}
+
+function calcEstacion(e, fechaPago, alto) {
+  const m2 = SUP_JUAREZ[e.id], tu = tarifaUMA(m2), s = estatus(e, RI_LFM);
+  const ajuste = alto ? 1 + (+S.param.ajusteAlto || 0) / 100 : 1;
+  if (!s.fecha) return null;
+  const venc = new Date(s.fecha + "T00:00:00");
+  let periodos = 0, derechos = 0, recargos = 0, d = new Date(venc);
+  if (s.k === "vencido" || venc <= fechaPago) {
+    const umaPago = umaEnFecha(fechaPago).uma;
+    const cuota = Math.round(tu * umaPago * ajuste * 100) / 100;
+    while (d < fechaPago) {
+      periodos++; derechos += cuota;
+      if (alto) recargos += Math.min(1, (+S.param.recargoMensual || 0) / 100 * mesesEntre(d, fechaPago)) * cuota;
+      d = new Date(d.getFullYear() + 1, d.getMonth(), d.getDate());
+    }
+    if (!periodos) { periodos = 1; derechos = cuota; }
+  } else {
+    periodos = 1; derechos = Math.round(tu * umaEnFecha(venc).uma * ajuste * 100) / 100;
+  }
+  recargos = Math.round(recargos * 100) / 100;
+  return { m2, tu, s, periodos, derechos, recargos, total: derechos + recargos };
+}
+
+function renderEstimador() {
+  const P = S.param;
+  document.getElementById("tA").textContent = P.tarifa.hasta100; document.getElementById("tB").textContent = P.tarifa.hasta1000; document.getElementById("tC").textContent = P.tarifa.mas1000;
+  const fp = document.getElementById("estFechaPago");
+  if (!fp.value) { const t = new Date(); fp.value = `${t.getFullYear() + (t.getMonth() >= 10 ? 1 : 0)}-${t.getMonth() >= 10 ? "02-01" : String(t.getMonth()+1).padStart(2,"0") + "-" + String(t.getDate()).padStart(2,"0")}`; }
+  if (document.activeElement !== document.getElementById("pAjuste")) document.getElementById("pAjuste").value = P.ajusteAlto;
+  if (document.activeElement !== document.getElementById("pRecargo")) document.getElementById("pRecargo").value = P.recargoMensual;
+  const fechaPago = new Date(fp.value + "T00:00:00");
+  const alto = document.getElementById("estEscenario").value === "alto";
+  const filtro = document.getElementById("estFiltro").value, exIP = document.getElementById("estExcluirIP").checked;
+  const local = { ...P, ajusteAlto: parseFloat(document.getElementById("pAjuste").value) || 0, recargoMensual: parseFloat(document.getElementById("pRecargo").value) || 0 };
+  const guard = S.param; S.param = local;
+  const excl = [];
+  const filas = ESTACIONES.filter(e => SUP_JUAREZ[e.id]).map(e => {
+    const c = calcEstacion(e, fechaPago, alto); if (!c) return null;
+    if (filtro === "vencidas" && c.s.k !== "vencido") return null;
+    if (filtro === "vencidas_alerta" && !["vencido","alerta"].includes(c.s.k)) return null;
+    const ip = estatus(e, RI_IP).k;
+    if (exIP && !["vigente","alerta"].includes(ip)) { excl.push(e.name); return null; }
+    return { e, ...c };
+  }).filter(Boolean).sort((a,b) => b.total - a.total);
+  S.param = guard;
+  const u = umaEnFecha(fechaPago);
+  const tot = filas.reduce((a,f) => ({ d: a.d + f.derechos, r: a.r + f.recargos, t: a.t + f.total, x: a.x + Math.ceil(f.total/500)*500 }), { d:0, r:0, t:0, x:0 });
+  document.getElementById("estResumen").textContent = filas.length
+    ? `${filas.length} ${filas.length === 1 ? "licencia" : "licencias"} · estimado ${mxn(tot.t)} (redondeado ${mxn(tot.x)}) con UMA ${u.oficial ? "oficial" : "estimada"} de ${mxn(u.uma)}`
+    : "Sin licencias que cumplan el filtro.";
+  if (!S.estAbierto) return;
+  pintarUmas();
+  document.getElementById("estBody").innerHTML = filas.map(f => `<tr class="border-b border-gray-100 ${f.s.k === "vencido" ? "fila-vencida" : f.s.k === "alerta" ? "fila-alerta" : ""}">
+    <td class="p-2 pl-3 font-semibold text-slate-800">${esc(f.e.name)} <span class="text-xs text-slate-400 num">${esc(f.e.clave)}</span></td>
+    <td class="p-2 text-right num">${f.m2.toLocaleString("es-MX")} m²</td>
+    <td class="p-2 text-right">${f.tu} UMA</td>
+    <td class="p-2 text-xs"><span class="status-badge ${f.s.clase}">${esc(fFecha(f.s.fecha))}</span></td>
+    <td class="p-2 text-right">${f.periodos}</td>
+    <td class="p-2 text-right num">${mxn(f.derechos)}</td>
+    <td class="p-2 text-right num">${alto ? mxn(f.recargos) : "—"}</td>
+    <td class="p-2 text-right num font-semibold">${mxn(f.total)}</td>
+    <td class="p-2 pr-3 text-right num font-bold text-emerald-700">${mxn(Math.ceil(f.total/500)*500)}</td></tr>`).join("") || `<tr><td colspan="9" class="p-4 text-center text-slate-500">Ninguna licencia cumple el filtro.</td></tr>`;
+  document.getElementById("estPie").innerHTML = filas.length ? `<tr class="bg-slate-50 font-bold text-slate-800"><td class="p-2 pl-3" colspan="5">Total (${filas.length})</td><td class="p-2 text-right num">${mxn(tot.d)}</td><td class="p-2 text-right num">${alto ? mxn(tot.r) : "—"}</td><td class="p-2 text-right num">${mxn(tot.t)}</td><td class="p-2 pr-3 text-right num text-emerald-700">${mxn(tot.x)}</td></tr>` : "";
+  document.getElementById("estNotas").innerHTML = [
+    `UMA aplicada al ${fFecha(fp.value)}: <b>${mxn(u.uma)}</b> (${u.oficial ? "oficial" : "estimada con la inflación capturada"}).`,
+    alto ? `Escenario alto: +${local.ajusteAlto}% de tarifa y recargos de ${local.recargoMensual}% mensual por cada periodo omitido (tope 100%). Son supuestos; confirmar con Tesorería Municipal.` : "Escenario base: solo derechos con la UMA del año de pago, sin recargos.",
+    "No incluye multas por operar sin licencia vigente.",
+    excl.length ? `Excluidas por no tener IP vigente: ${excl.map(esc).join(", ")}.` : "",
+    "Solo estaciones de Juárez; Parral, Ahumada, Aguascalientes y San Miguel de Allende tienen tabulador propio."
+  ].filter(Boolean).join(" ");
+}
+
+function iniciar() {
+  llenarReqs();
+  const razones = [...new Set(ESTACIONES.map(e => e.razon))];
+  document.getElementById("razonFilter").insertAdjacentHTML("beforeend", razones.map(r => `<option value="${esc(r)}">${esc(r)} (${ESTACIONES.filter(e => e.razon === r).length})</option>`).join(""));
+  document.getElementById("fCarga").textContent = fFecha(FECHA_CARGA);
+  render();
+  conectar();
+}
+
+// ---- Conexión a Supabase: identidad, base de datos, PDF ----
+// Reemplazar SUPABASE_URL por la URL del proyecto: Supabase > Project Settings > API > Project URL (https://<ref>.supabase.co)
+const SUPABASE_URL = "https://njrhwojdttnbshhztyqp.supabase.co/rest/v1/";
+const SUPABASE_KEY = "sb_publishable_9ri1U4PhUUOBsbK3bkX0Ng_RrNGN30c";
+const BUCKET = "expediente";
+const sb = (window.supabase && window.supabase.createClient) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+// Ruta del PDF en Storage (bucket público de lectura) -> URL pública
+function urlPdf(id) {
+  if (!id) return "#";
+  if (/^https?:/.test(id)) return id;
+  if (!sb) return "#";
+  return sb.storage.from(BUCKET).getPublicUrl(id).data.publicUrl;
+}
+
+// Lee una tabla completa en páginas de 1000
+async function todo(tabla, orden) {
+  let out = [], desde = 0;
+  for (;;) {
+    let q = sb.from(tabla).select("*").range(desde, desde + 999);
+    if (orden) q = q.order(orden);
+    const { data, error } = await q;
+    if (error) throw error;
+    out = out.concat(data || []);
+    if (!data || data.length < 1000) return out;
+    desde += 1000;
+  }
+}
+
+// Catálogos: estaciones, requerimientos (fundamentos y subcarpetas) y dependencias
+async function cargarCatalogos() {
+  if (!sb) return;
+  const [est, req, dep] = await Promise.all([todo("estaciones", "id"), todo("requerimientos", "idx"), todo("dependencias", "orden")]);
+  if (est.length) ESTACIONES = est.map(e => ({ id: e.id, clave: e.clave, name: e.nombre, razon: e.razon_social || "", permiso: e.permiso || "", direccion: e.direccion || "", obs: e.obs || "" }));
+  if (req.length) {
+    REQUERIMIENTOS.splice(0, REQUERIMIENTOS.length, ...req.map(r => r.nombre));
+    FUNDAMENTOS.splice(0, FUNDAMENTOS.length, ...req.map(r => ({ a: r.autoridad || "", t: r.fundamento || "", f: r.fuentes || [], c: !!r.por_confirmar })));
+    Object.keys(SUBCARPETAS).forEach(k => delete SUBCARPETAS[k]);
+    req.forEach(r => { if (r.subcarpetas && r.subcarpetas.length) SUBCARPETAS[r.idx] = r.subcarpetas; });
+    if (dep.length) DEPENDENCIAS.splice(0, DEPENDENCIAS.length, { k: "todas", n: "Todas", r: null },
+      ...dep.map(d => ({ k: d.clave, n: d.nombre, r: req.filter(r => r.dependencia === d.clave).map(r => r.idx) })));
+  }
+}
+async function arrancar() {
+  try { await cargarCatalogos(); }
+  catch (e) { console.warn("Catálogos de Supabase no disponibles", e); }
+  iniciar();
+}
+
+// Registros + documentos -> forma que usa el tablero
+async function leerRegistros() {
+  const [rs, ds] = await Promise.all([todo("registros"), todo("documentos", "orden")]);
+  const porReg = {};
+  ds.forEach(d => (porReg[d.registro_id] = porReg[d.registro_id] || []).push({
+    id: d.storage_path, n: d.nombre, clase: d.clase || "", carpeta: d.subcarpeta || undefined,
+    at: d.cargado_at, bytes: d.bytes, origen: d.origen, by: null
+  }));
+  const reg = {};
+  rs.forEach(r => { reg[r.id] = { estacion: r.estacion_id, req: r.req, reqNombre: REQUERIMIENTOS[r.req], tipo: r.tipo || "", fecha: r.fecha || "", obs: r.obs || "",
+    updatedBy: r.updated_by, updatedVia: r.updated_via, updatedAt: r.updated_at, pdfs: porReg[r.id] || [] }; });
+  return reg;
+}
+async function guardarRegistro(k, d) {
+  const fila = { id: k, estacion_id: d.estacion, req: d.req, tipo: d.tipo || "", fecha: d.fecha || null, obs: d.obs || "",
+    updated_by: S.myId, updated_via: "tablero", updated_at: new Date().toISOString() };
+  let { error } = await sb.from("registros").upsert(fila);
+  if (error) throw error;
+  ({ error } = await sb.from("documentos").delete().eq("registro_id", k));
+  if (error) throw error;
+  const docs = (d.pdfs || []).map((p, i) => ({ registro_id: k, orden: i, nombre: p.n, clase: p.clase || null, subcarpeta: p.carpeta || null,
+    storage_path: p.id, origen: p.origen || null, bytes: p.bytes || null, cargado_at: p.at || new Date().toISOString() }));
+  if (docs.length) { ({ error } = await sb.from("documentos").insert(docs)); if (error) throw error; }
+}
+
+// Adaptador con la misma interfaz que usaba el tablero (doc/collection/onSnapshot)
+function crearDb() {
+  const snapDe = obj => ({ docs: Object.entries(obj).map(([id, v]) => ({ id, exists: true, data: () => v })), metadata: { fromCache: false } });
+  const docSnap = (v) => ({ exists: !!v, data: () => v });
+  const config = async () => { const { data, error } = await sb.from("config").select("valor").eq("clave", "derechos").maybeSingle(); if (error) throw error; return data ? data.valor : null; };
+  function doc(path) {
+    const [col, id] = path.split("/");
+    if (col === "registros") return {
+      set: d => guardarRegistro(id, d),
+      update: d => guardarRegistro(id, { ...(S.reg[id] || {}), ...d })
+    };
+    if (col === "ope") return {
+      get: async () => { const { data, error } = await sb.from("ope_accesos").select("*").eq("estacion_id", id).maybeSingle(); if (error) throw error;
+        return docSnap(data ? { correo: data.correo, resguardo: data.resguardo, updatedAt: data.updated_at } : null); },
+      set: async d => { const { error } = await sb.from("ope_accesos").upsert({ estacion_id: id, correo: d.correo, resguardo: d.resguardo, updated_at: new Date().toISOString() }); if (error) throw error; }
+    };
+    if (col === "config" && id === "derechos") return {
+      onSnapshot: (cb, err) => { config().then(v => cb(docSnap(v))).catch(e => err && err(e)); return () => {}; },
+      set: async v => { const { error } = await sb.from("config").upsert({ clave: "derechos", valor: v }); if (error) throw error; }
+    };
+    // El buzón trabaja con el formulario de Google; en Supabase no se guarda aquí.
+    return { set: async () => { throw { code: "no_disponible" }; }, update: async () => { throw { code: "no_disponible" }; }, get: async () => docSnap(null), onSnapshot: () => () => {} };
+  }
+  function collection(path) {
+    if (path === "registros") return {
+      onSnapshot: (cb, err) => {
+        let t = null;
+        const cargar = () => leerRegistros().then(r => cb(snapDe(r))).catch(e => err && err({ code: e.code || e.message || "error" }));
+        cargar();
+        const ch = sb.channel("registros-rt")
+          .on("postgres_changes", { event: "*", schema: "public", table: "registros" }, () => { clearTimeout(t); t = setTimeout(cargar, 400); })
+          .on("postgres_changes", { event: "*", schema: "public", table: "documentos" }, () => { clearTimeout(t); t = setTimeout(cargar, 400); })
+          .subscribe();
+        return () => sb.removeChannel(ch);
+      }
+    };
+    return { onSnapshot: (cb) => { cb({ docs: [], metadata: { fromCache: false } }); return () => {}; } };
+  }
+  return { doc, collection };
+}
+
+// PDF a Storage: <estacion>/<req>/<uuid>.pdf
+const assetsSb = {
+  upload: async (file) => {
+    const { id, ri } = S.editando || {};
+    const uid = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2));
+    const path = `${id}/${ri}/${uid}.pdf`;
+    const { error } = await sb.storage.from(BUCKET).upload(path, file, { contentType: "application/pdf", upsert: false });
+    if (error) throw error;
+    return { id: path, url: urlPdf(path), sizeBytes: file.size, contentType: "application/pdf" };
+  },
+  delete: async (path) => { if (path && !/^https?:/.test(path)) await sb.storage.from(BUCKET).remove([path]); }
+};
+const downloadsSb = {
+  save: async ({ filename, data }) => {
+    const u = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
+    const a = document.createElement("a"); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 4000);
+  }
+};
+
+// Sesión: por defecto Modo Auditor; con correo y contraseña de un administrador, Modo Normatividad
+async function aplicarSesion(session) {
+  S.sesion = session || null;
+  const u = session && session.user;
+  let admin = false;
+  if (u) {
+    const { data } = await sb.from("admins").select("user_id").eq("user_id", u.id).maybeSingle();
+    admin = !!data;
+  }
+  S.myId = u ? u.id : null;
+  S.puedeEditar = admin;
+  S.verComoAuditor = false;
+  S.assets = admin ? assetsSb : null;
+  const me = u ? { id: u.id, name: (u.user_metadata && u.user_metadata.nombre) || u.email, avatarUrl: null } : null;
+  S.user = { me: async () => me || { id: null, name: "" }, canEdit: async () => admin, isOwner: () => admin, profiles: async () => ({}) };
+  pintarModo(me);
+  render();
+  return { u, admin };
+}
+function botonSesion() {
+  if (S.sesion) { sb.auth.signOut(); return; }
+  document.getElementById("lgMsg").textContent = "Solo administradores de Normatividad. Los auditores no necesitan iniciar sesión.";
+  document.getElementById("loginModal").classList.remove("hidden");
+  setTimeout(() => document.getElementById("lgCorreo").focus(), 50);
+  if (window.lucide) lucide.createIcons();
+}
+async function entrar() {
+  const m = document.getElementById("lgMsg");
+  m.textContent = "Verificando…";
+  const { data, error } = await sb.auth.signInWithPassword({ email: document.getElementById("lgCorreo").value.trim(), password: document.getElementById("lgPass").value });
+  document.getElementById("lgPass").value = "";
+  if (error) { m.textContent = "No se pudo iniciar sesión: correo o contraseña incorrectos."; return; }
+  const { admin } = await aplicarSesion(data.session);
+  if (!admin) { m.textContent = "Sesión iniciada, pero este usuario no está registrado como administrador. Sigue en Modo Auditor."; return; }
+  cerrar("loginModal");
+}
+
+async function conectar() {
+  const est = document.getElementById("estadoDb");
+  if (!sb) { est.textContent = "No se pudo cargar la librería de Supabase: solo se muestran los datos base."; return; }
+  S.downloads = downloadsSb;
+  S.db = crearDb();
+  S.user = { me: async () => ({ id: null, name: "" }), canEdit: async () => false, isOwner: () => false, profiles: async () => ({}) };
+  const { data: s0 } = await sb.auth.getSession();
+  await aplicarSesion(s0 && s0.session);
+  sb.auth.onAuthStateChange((ev, session) => { if (ev === "SIGNED_OUT" || ev === "SIGNED_IN" || ev === "TOKEN_REFRESHED") aplicarSesion(session); });
+  est.textContent = "Cargando capturas desde Supabase…";
+  const timer = setTimeout(() => { if (!S.dbListo) est.textContent = "Supabase aún no responde; lo mostrado puede estar incompleto."; }, 10000);
+  S.db.collection("registros").onSnapshot(snap => {
+    const reg = {};
+    snap.docs.forEach(d => { if (d.exists) reg[d.id] = d.data(); });
+    S.reg = reg;
+    S.dbListo = true; clearTimeout(timer);
+    est.textContent = `${Object.values(reg).filter(r => r.tipo).length} requerimientos capturados en Supabase.`;
+    render();
+    if (!document.getElementById("docModal").classList.contains("hidden") && S.visorId) visor(S.visorId);
+  }, err => { clearTimeout(timer); est.textContent = "No se pudieron cargar las capturas de Supabase (" + err.code + "). Se muestran los datos base."; });
+  suscribirPreguntas();
+  S.db.doc("config/derechos").onSnapshot(snap => {
+    if (snap.exists) { const d = snap.data(); S.param = { ...JSON.parse(JSON.stringify(PARAM_DEF)), ...d, tarifa: { ...PARAM_DEF.tarifa, ...(d.tarifa || {}) } }; }
+    renderEstimador();
+  }, () => renderEstimador());
+}
+
+function pintarModo(me) {
+  const admin = esAdmin();
+  document.getElementById("avisoAdmin").hidden = !admin;
+  document.getElementById("mEditar").hidden = !admin;
+  const cab = document.getElementById("cabecera");
+  cab.classList.toggle("modo-admin", admin);
+  document.getElementById("modoDot").className = "w-2 h-2 rounded-full " + (admin ? "bg-amber-300" : "bg-emerald-300");
+  const txt = document.getElementById("modoTxt");
+  const av = document.getElementById("modoAvatar");
+  if (admin) {
+    txt.textContent = `Modo Normatividad · ${(me && me.name) || "Administrador"}`;
+    if (me && me.avatarUrl) { av.src = me.avatarUrl; av.classList.remove("hidden"); }
+  } else { txt.textContent = "Modo Auditor (Solo Lectura)"; av.classList.add("hidden"); }
+  document.getElementById("btnPregFlot").hidden = admin;
+  document.getElementById("mPreguntar").hidden = admin;
+  document.getElementById("bandeja").hidden = !admin;
+  if (me && !document.getElementById("qNombre").value) document.getElementById("qNombre").value = me.name || "";
+  suscribirPreguntas();
+  const b = document.getElementById("btnVista");
+  b.classList.toggle("hidden", !S.puedeEditar);
+  b.textContent = S.verComoAuditor ? "Volver a Modo Normatividad" : "Ver como auditor";
+  const bl = document.getElementById("btnLogin");
+  if (bl) bl.textContent = S.sesion ? "Cerrar sesión" : "Iniciar sesión · Normatividad";
+  if (window.lucide) lucide.createIcons();
+}
+async function alternarVista() { S.verComoAuditor = !S.verComoAuditor; pintarModo(S.user ? await S.user.me() : null); render(); }
+
+function pintarAlertas() {
+  const enDep = reqsDep();
+  const porReq = REQUERIMIENTOS.map((nombre, i) => {
+    const ven = ESTACIONES.filter(e => estatus(e, i).k === "vencido").length;
+    const ale = ESTACIONES.filter(e => estatus(e, i).k === "alerta").length;
+    return { i, nombre, ven, ale };
+  }).filter(x => (x.ven || x.ale) && enDep.includes(x.i));
+  const totVen = porReq.reduce((a, x) => a + x.ven, 0), totAle = porReq.reduce((a, x) => a + x.ale, 0);
+  const box = document.getElementById("alertas");
+  box.hidden = !(totVen || totAle);
+  if (box.hidden) return;
+  document.getElementById("alertasTit").textContent =
+    `Atención: ${totVen} ${totVen === 1 ? "documento vencido" : "documentos vencidos"}` + (totAle ? ` y ${totAle} por vencer en 60 días o menos` : "");
+  const actual = reqIdx(), sem = document.getElementById("semFilter").value;
+  document.getElementById("alertasChips").innerHTML = porReq.sort((a, b) => b.ven - a.ven || b.ale - a.ale).map(x => {
+    const activo = x.i === actual && sem === (x.ven ? "vencido" : "alerta");
+    return `<button onclick="irAlerta(${x.i}, '${x.ven ? "vencido" : "alerta"}')" class="cursor-pointer text-left bg-white border ${activo ? "border-red-500 ring-2 ring-red-200" : "border-red-200 hover:border-red-400"} rounded-lg px-3 py-1.5 text-xs">
+      <span class="font-semibold text-slate-800">${esc(x.nombre)}</span>
+      ${x.ven ? `<span class="ml-1.5 inline-block bg-red-600 text-white rounded-full px-1.5 font-bold num">${x.ven}</span>` : ""}
+      ${x.ale ? `<span class="ml-1 inline-block bg-yellow-300 text-yellow-900 rounded-full px-1.5 font-bold num">${x.ale}</span>` : ""}
+    </button>`;
+  }).join("");
+}
+function irAlerta(ri, sem) {
+  document.getElementById("reqFilter").value = String(ri);
+  document.getElementById("semFilter").value = sem;
+  render();
+}
+
+function render() {
+  const ri = reqIdx(), req = REQUERIMIENTOS[ri];
+  const q = document.getElementById("searchInput").value.toLowerCase().trim();
+  const raz = document.getElementById("razonFilter").value;
+  const sem = document.getElementById("semFilter").value;
+  const admin = esAdmin();
+
+  const sts = ESTACIONES.map(e => ({ e, s: estatus(e, ri) }));
+  const cuenta = k => sts.filter(x => x.s.k === k).length;
+  document.getElementById("kTot").textContent = ESTACIONES.length;
+  document.getElementById("kVig").textContent = cuenta("vigente");
+  document.getElementById("kAle").textContent = cuenta("alerta");
+  document.getElementById("kVen").textContent = cuenta("vencido");
+  const prox = sts.filter(x => x.s.dias >= 0).sort((a, b) => a.s.dias - b.s.dias)[0];
+  document.getElementById("kProx").innerHTML = prox ? `${esc(prox.e.name)}<span class="block text-xs font-medium text-gray-500">${fFecha(prox.s.fecha)} · ${esc(prox.s.detalle.replace("Faltan ", "faltan "))}</span>` : `<span class="text-gray-400 font-medium">Sin fechas capturadas</span>`;
+
+  pintarFund();
+  pintarDeps();
+  pintarAlertas();
+  pintarBandeja();
+  renderEstimador();
+
+  const vis = sts.filter(({ e, s }) =>
+    (raz === "todos" || e.razon === raz) && (sem === "todos" || s.k === sem) &&
+    [e.name, e.clave, e.permiso, e.direccion, e.razon].join(" ").toLowerCase().includes(q));
+
+  let html = "", grupo = null;
+  vis.forEach(({ e, s }) => {
+    if (e.razon !== grupo) {
+      grupo = e.razon;
+      const n = vis.filter(x => x.e.razon === grupo).length;
+      html += `<tr class="bg-slate-50 border-b border-gray-200"><td colspan="5" class="px-4 py-2 text-xs font-bold text-slate-700 uppercase tracking-wider"><span class="inline-flex items-center gap-2"><i data-lucide="building-2" class="w-3.5 h-3.5 text-slate-400"></i>${esc(grupo)} <span class="font-semibold text-slate-400 normal-case tracking-normal">· ${n} ${n === 1 ? "estación" : "estaciones"}</span></span></td></tr>`;
+    }
+    const docs = docsDe(e, ri);
+    const r = S.reg[clave(e.id, ri)];
+    const principal = docs[0];
+    html += `<tr class="border-b border-gray-100 hover:bg-slate-50/70 align-top ${s.k === "vencido" ? "fila-vencida" : s.k === "alerta" ? "fila-alerta" : ""}">
+      <td class="p-3 pl-4">
+        <div class="font-bold text-slate-900 flex items-center gap-1.5">${esc(e.name)}${e.obs ? `<span title="${esc(e.obs)}" class="text-amber-600"><i data-lucide="flag" class="w-3.5 h-3.5"></i></span>` : ""}</div>
+        <div class="text-[11px] font-mono text-slate-400 mt-0.5">E.S. ${esc(e.clave)}</div>
+      </td>
+      <td class="p-3 text-xs text-gray-600 leading-relaxed">${esc(e.direccion)}</td>
+      <td class="p-3">
+        <div class="text-xs font-semibold text-slate-800">${esc(req)}</div>
+        ${ri === 0 ? `<div class="text-[11px] font-mono text-gray-500 mt-1 bg-gray-100 inline-block px-1.5 py-0.5 rounded">${esc(e.permiso)}</div>${e.ficha ? `<div class="text-[11px] text-emerald-700 font-medium mt-1 flex items-center gap-1"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i>Verificado contra título</div>` : ""}` : ""}
+        ${r && r.obs ? `<div class="text-[11px] text-slate-500 mt-1 line-clamp-2" title="${esc(r.obs)}">${esc(r.obs)}</div>` : ""}
+        ${SUBCARPETAS[ri] ? `<div class="flex flex-wrap gap-1 mt-1.5">${SUBCARPETAS[ri].map(c => { const n = docs.filter(d => d.carpeta === c).length; return `<button onclick="visor('${e.id}')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium cursor-pointer ${n ? "border-teal-300 bg-teal-50 text-teal-800" : "border-gray-200 bg-white text-gray-400"}"><i data-lucide="folder" class="w-3 h-3"></i>${esc(c)} ${n}</button>`; }).join("")}</div>` : ""}
+      </td>
+      <td class="p-3">
+        <span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${s.clase}">${esc(s.texto)}</span>
+        ${s.fecha ? `<div class="text-xs text-slate-700 mt-1.5 font-medium">${fFecha(s.fecha)}</div>` : ""}
+        <div class="text-[11px] text-gray-500 ${s.fecha ? "" : "mt-1.5"}">${esc(s.detalle)}</div>
+      </td>
+      <td class="p-3 pr-4">
+        <div class="flex flex-col sm:flex-row flex-wrap items-stretch justify-center gap-1.5">
+          ${principal
+            ? (principal.src === "tablero"
+              ? `<button onclick="verDoc('${e.id}', ${ri}, 0)" class="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs font-medium text-white cursor-pointer"><i data-lucide="eye" class="w-3.5 h-3.5"></i>Visualizar</button>
+                 <button onclick="bajarDoc('${e.id}', ${ri}, 0, this)" class="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-medium text-white cursor-pointer"><i data-lucide="file-down" class="w-3.5 h-3.5"></i>Descargar PDF</button>`
+              : `<a href="${esc(principal.u)}" target="_blank" rel="noopener" title="Se abre en monday (requiere sesión)" class="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs font-medium text-white"><i data-lucide="eye" class="w-3.5 h-3.5"></i>Visualizar<span class="text-[10px] text-slate-400">monday</span></a>
+                 <a href="${esc(principal.u)}" target="_blank" rel="noopener" title="Se descarga desde monday" class="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-medium text-white"><i data-lucide="file-down" class="w-3.5 h-3.5"></i>Descargar PDF</a>`)
+            : `<button disabled class="chip-btn inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-200 text-xs font-medium text-gray-600"><i data-lucide="file-x" class="w-3.5 h-3.5"></i>Sin PDF</button>`}
+          <button onclick="visor('${e.id}')" title="Ficha y todos los documentos" class="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer"><i data-lucide="folder-open" class="w-3.5 h-3.5"></i>Expediente${docs.length ? ` <span class="text-slate-400">${docs.length}</span>` : ""}</button>
+          ${admin ? `<button onclick="abrirEditor('${e.id}')" class="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-xs font-medium text-white cursor-pointer"><i data-lucide="pencil" class="w-3.5 h-3.5"></i>Editar</button>` : ""}
+        </div>
+      </td>
+    </tr>`;
+  });
+  document.getElementById("tbody").innerHTML = html;
+  document.getElementById("sinRes").classList.toggle("hidden", vis.length > 0);
+  const obs = ESTACIONES.filter(e => e.obs).length;
+  document.getElementById("pie").innerHTML = `Mostrando ${vis.length} de ${ESTACIONES.length} estaciones · <span class="text-amber-700"><i data-lucide="flag" class="w-3 h-3 inline -mt-0.5"></i> ${obs} con observaciones de datos</span> (pase el cursor sobre la bandera o abra el visor).`;
+  if (window.lucide) lucide.createIcons();
+}
+
+async function nombreDe(id) {
+  if (!id || !S.user) return "";
+  try { const ps = await S.user.profiles([id]); return (ps[id] && ps[id].name) || "un administrador"; } catch { return "un administrador"; }
+}
+
+async function quien(r) { return r.updatedVia === "sincronizacion" ? "sincronización automática desde la carpeta del escritorio" : r.updatedVia === "chat" ? "carga desde el chat de Normatividad" : nombreDe(r.updatedBy); }
+
+async function visor(id) {
+  S.visorId = id;
+  const e = porId(id), ri = reqIdx(), s = estatus(e, ri), docs = docsDe(e, ri);
+  const r = S.reg[clave(e.id, ri)];
+  document.getElementById("mEst").textContent = `${e.name} · E.S. ${e.clave}`;
+  document.getElementById("mRaz").textContent = e.razon;
+  document.getElementById("mDir").textContent = e.direccion;
+  document.getElementById("mReq").textContent = REQUERIMIENTOS[ri];
+  document.getElementById("mPer").textContent = e.permiso;
+  document.getElementById("mVto").textContent = s.fecha ? `${fFecha(s.fecha)} (${s.detalle.toLowerCase()})` : s.detalle;
+  const st = document.getElementById("mSt"); st.textContent = s.texto; st.className = `inline-block px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider mt-0.5 ${s.clase}`;
+  const fi = document.getElementById("mFicha");
+  fi.classList.toggle("hidden", !(e.ficha && ri === 0));
+  document.getElementById("mFichaList").innerHTML = (ri === 0 && e.ficha ? e.ficha : []).map(([k, v]) => `<div><dt class="text-emerald-900/60">${esc(k)}</dt><dd class="font-medium text-slate-800">${esc(v)}</dd></div>`).join("");
+  const notas = [e.obs ? "Observación de datos: " + e.obs : "", r && r.obs ? "Nota de Normatividad: " + r.obs : ""].filter(Boolean).join("  ·  ");
+  document.querySelector("#mFund [data-b]").innerHTML = fundHTML(ri);
+  const ob = document.getElementById("mObs"); ob.classList.toggle("hidden", !notas); ob.querySelector("p").textContent = notas;
+  const act = document.getElementById("mAct");
+  if (r && r.updatedAt) { act.classList.remove("hidden"); act.textContent = `Última actualización: ${fFechaHora(r.updatedAt)} por ${await quien(r)}`; } else act.classList.add("hidden");
+  document.getElementById("mN").textContent = docs.length;
+  document.getElementById("mCopyMsg").textContent = "";
+  const liDoc = (d, i) => `
+    <li class="p-3 flex flex-col sm:flex-row sm:items-center gap-2">
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-slate-800 break-words">${esc(d.n)}</p>
+        <p class="text-[11px] text-gray-400">${d.src === "tablero" ? `${d.clase ? esc(d.clase) + " · " : ""}En el tablero${d.at ? " desde " + fFecha(d.at) : ""}` : ""}</p>
+      </div>
+      <div class="flex gap-1.5 shrink-0">
+        ${d.src === "tablero"
+          ? `<button onclick="verDoc('${id}', ${ri}, ${i})" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium cursor-pointer"><i data-lucide="eye" class="w-3.5 h-3.5"></i>Visualizar</button>
+             <button onclick="bajarDoc('${id}', ${ri}, ${i}, this)" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium cursor-pointer"><i data-lucide="file-down" class="w-3.5 h-3.5"></i>Descargar</button>`
+          : `<a href="${esc(d.u)}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium"><i data-lucide="external-link" class="w-3.5 h-3.5"></i>Abrir en monday</a>`}
+        ${d.l ? `<button onclick="copiarRuta('${id}', ${i})" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-300 text-xs font-medium text-slate-700 hover:bg-gray-50 cursor-pointer" title="${esc(d.l)}"><i data-lucide="folder" class="w-3.5 h-3.5"></i>Ruta en servidor</button>` : ""}
+      </div>
+    </li>`;
+  const L = SUBCARPETAS[ri];
+  if (L) {
+    document.getElementById("mDocs").innerHTML = L.map(c => {
+      const g = docs.map((d, i) => [d, i]).filter(([d]) => d.carpeta === c);
+      return `<li class="px-3 py-2 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5"><i data-lucide="folder" class="w-3.5 h-3.5 text-teal-600"></i>${esc(c)} <span class="font-semibold text-slate-400 normal-case tracking-normal">· ${g.length}</span></li>` +
+        (g.length ? g.map(([d, i]) => liDoc(d, i)).join("") : `<li class="p-3 text-xs text-gray-400">Sin documentos en esta subcarpeta.</li>`);
+    }).join("");
+  } else document.getElementById("mDocs").innerHTML = docs.length ? docs.map((d, i) => liDoc(d, i)).join("") : `<li class="p-3 text-sm text-gray-500">Aún no hay documentos para este requerimiento.</li>`;
+  pintarOpe(id, ri);
+  document.getElementById("mEditar").onclick = () => { cerrar("docModal"); abrirEditor(id); };
+  document.getElementById("docModal").classList.remove("hidden");
+  if (window.lucide) lucide.createIcons();
+}
+
+// ---- Acceso OPE ASEA (ruta "ope" legible solo por administradores) ----
+async function pintarOpe(id, ri) {
+  const box = document.getElementById("mOpe");
+  const ver = esAdmin() && RI_OPE.includes(ri) && !!S.db;
+  box.classList.toggle("hidden", !ver);
+  if (!ver) return;
+  const c = document.getElementById("opeCorreo"), g = document.getElementById("opeResguardo"), m = document.getElementById("opeMsg");
+  c.value = ""; g.value = ""; m.textContent = "La contraseña no se guarda en el tablero.";
+  try { const s = await S.db.doc("ope/" + id).get(); if (s.exists && S.visorId === id) { const d = s.data() || {}; c.value = d.correo || ""; g.value = d.resguardo || ""; if (d.updatedAt) m.textContent = "Actualizado " + fFechaHora(d.updatedAt) + ". La contraseña no se guarda en el tablero."; } } catch (e) {}
+  document.getElementById("opeGuardar").onclick = async () => {
+    m.textContent = "Guardando…";
+    try { await S.db.doc("ope/" + id).set({ estacion: id, correo: c.value.trim(), resguardo: g.value.trim(), updatedBy: S.myId, updatedAt: new Date().toISOString() }); m.textContent = "Guardado. La contraseña no se guarda en el tablero."; }
+    catch (e) { m.textContent = "No se pudo guardar (solo administradores)."; }
+  };
+}
+
+// ---- Edición (solo Normatividad) ----
+async function abrirEditor(id) {
+  if (!esAdmin()) return;
+  const e = porId(id), ri = reqIdx();
+  const r = S.reg[clave(id, ri)];
+  S.editando = { id, ri };
+  S.borrador = { pdfs: ((r && r.pdfs) || []).slice() };
+  document.getElementById("eEst").textContent = `${e.name} · E.S. ${e.clave} — ${e.razon}`;
+  document.getElementById("eReq").textContent = REQUERIMIENTOS[ri] + (ri === 0 ? ` · ${e.permiso}` : "");
+  const c = captura(e, ri);
+  const sel = document.getElementById("eTipo");
+  sel.options[0].textContent = "Sin capturar";
+  sel.value = r && r.tipo ? r.tipo : "";
+  document.getElementById("eFecha").value = (r && r.tipo ? r.fecha : "") || "";
+  document.getElementById("eObs").value = (r && r.obs) || "";
+  document.getElementById("eMsg").textContent = "";
+  document.getElementById("eSubirMsg").textContent = "";
+  document.getElementById("eAct").textContent = r && r.updatedAt ? `Última actualización: ${fFechaHora(r.updatedAt)} por ${await quien(r)}` : "Sin capturas previas en el tablero.";
+  document.getElementById("eSubirWrap").classList.toggle("hidden", !S.assets);
+  document.getElementById("eSinAssets").classList.toggle("hidden", !!S.assets);
+  const LC = SUBCARPETAS[ri], selC = document.getElementById("eCarpeta");
+  document.getElementById("eCarpetaWrap").classList.toggle("hidden", !LC);
+  selC.innerHTML = (LC || []).map(c => `<option>${esc(c)}</option>`).join("");
+  ajustarEditor(); pintarPdfsEditor();
+  document.getElementById("editModal").classList.remove("hidden");
+  if (window.lucide) lucide.createIcons();
+}
+function ajustarEditor() {
+  const t = document.getElementById("eTipo").value, ri = S.editando ? S.editando.ri : 0;
+  const wrap = document.getElementById("eFechaWrap"), f = document.getElementById("eFecha");
+  const usa = t === "fecha" || t === "tramite";
+  wrap.classList.toggle("hidden", !usa);
+  f.required = t === "fecha";
+  document.getElementById("eFechaLbl").textContent = t === "tramite" ? "Fecha de seguimiento (opcional)" : "Fecha de vencimiento";
+}
+function pintarPdfsEditor() {
+  const ul = document.getElementById("ePdfs"), p = S.borrador.pdfs;
+  ul.innerHTML = p.length ? p.map((d, i) => `
+    <li class="p-2.5 flex items-center gap-2">
+      <i data-lucide="file-text" class="w-4 h-4 text-slate-400 shrink-0"></i>
+      <a href="${esc(urlPdf(d.id))}" target="_blank" rel="noopener" class="flex-1 min-w-0 truncate text-slate-800 hover:underline">${esc(d.n)}</a>
+      ${SUBCARPETAS[S.editando.ri] ? `<select onchange="moverPdf(${i}, this.value)" class="text-[11px] border border-gray-300 rounded px-1 py-0.5 bg-white">${SUBCARPETAS[S.editando.ri].map(c => `<option ${carpetaDe(S.editando.ri, d) === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>` : ""}
+      <button type="button" id="q-${i}" onclick="quitarPdf(${i})" class="text-xs px-2 py-1 rounded border border-gray-300 text-red-700 hover:bg-red-50 cursor-pointer">Quitar</button>
+    </li>`).join("") : `<li class="p-2.5 text-xs text-gray-500">Sin PDF subidos.</li>`;
+  if (window.lucide) lucide.createIcons();
+}
+
+function cuerpoRegistro(extra) {
+  const { id, ri } = S.editando;
+  return { estacion: id, req: ri, reqNombre: REQUERIMIENTOS[ri], updatedBy: S.myId, updatedVia: "tablero", updatedAt: new Date().toISOString(), ...extra };
+}
+async function escribirPdfs() {
+  const { id, ri } = S.editando, k = clave(id, ri), ref = S.db.doc("registros/" + k);
+  const actual = S.reg[k];
+  if (actual) await ref.update({ pdfs: S.borrador.pdfs, updatedBy: S.myId, updatedVia: "tablero", updatedAt: new Date().toISOString() });
+  else await ref.set(cuerpoRegistro({ tipo: "", fecha: "", obs: "", pdfs: S.borrador.pdfs }));
+}
+
+async function subirPdfs(input) {
+  const files = [...input.files]; input.value = "";
+  const msg = document.getElementById("eSubirMsg");
+  if (!S.assets || !S.db) { msg.textContent = "La carga de PDF no está disponible."; return; }
+  for (const f of files) {
+    if (!/\.pdf$/i.test(f.name) && f.type !== "application/pdf") { msg.textContent = `${f.name}: solo se aceptan archivos PDF.`; continue; }
+    msg.textContent = `Subiendo ${f.name}…`;
+    try {
+      const up = await S.assets.upload(f, { type: "application/pdf" });
+      const LC = SUBCARPETAS[S.editando.ri];
+      S.borrador.pdfs.push({ id: up.id, n: f.name, at: new Date().toISOString(), by: S.myId, ...(LC ? { carpeta: document.getElementById("eCarpeta").value || LC[0] } : {}) });
+      await escribirPdfs();
+      msg.textContent = `${f.name} subido y guardado.`;
+      pintarPdfsEditor();
+    } catch (err) {
+      const c = err && err.code;
+      msg.textContent = c === "too_large" ? `${f.name} pesa más de 20 MB; comprímalo e inténtelo de nuevo.`
+        : c === "quota_or_state" ? "Se llenó el espacio de archivos del tablero."
+        : c === "invalid_argument" ? "Su cuenta no tiene permiso para guardar en el tablero."
+        : `No se pudo subir ${f.name} (${c || "error"}).`;
+    }
+  }
+}
+
+async function moverPdf(i, c) {
+  const d = S.borrador.pdfs[i]; if (!d) return;
+  const antes = d.carpeta; S.borrador.pdfs[i] = { ...d, carpeta: c };
+  try { await escribirPdfs(); document.getElementById("eSubirMsg").textContent = `${d.n} se movió a ${c}.`; }
+  catch (e) { S.borrador.pdfs[i] = { ...d, carpeta: antes }; document.getElementById("eSubirMsg").textContent = "No se pudo mover el PDF."; pintarPdfsEditor(); }
+}
+async function quitarPdf(i) {
+  const b = document.getElementById("q-" + i);
+  if (b && b.dataset.confirmar !== "1") { b.dataset.confirmar = "1"; b.textContent = "Confirmar"; b.classList.add("bg-red-600", "text-white"); return; }
+  const d = S.borrador.pdfs[i];
+  S.borrador.pdfs.splice(i, 1);
+  try {
+    await escribirPdfs();
+    if (S.assets) await S.assets.delete(d.id).catch(() => {});
+    document.getElementById("eSubirMsg").textContent = `${d.n} se quitó del tablero.`;
+  } catch (err) {
+    S.borrador.pdfs.splice(i, 0, d);
+    document.getElementById("eSubirMsg").textContent = "No se pudo quitar el PDF.";
+  }
+  pintarPdfsEditor();
+}
+
+async function guardar(ev) {
+  ev.preventDefault();
+  const msg = document.getElementById("eMsg"), btn = document.getElementById("eGuardar");
+  if (!S.db) { msg.textContent = "Sin conexión al tablero compartido."; msg.className = "text-xs font-medium text-red-700"; return; }
+  const tipo = document.getElementById("eTipo").value;
+  const fecha = (tipo === "fecha" || tipo === "tramite") ? document.getElementById("eFecha").value : "";
+  if (tipo === "fecha" && !fecha) { msg.textContent = "Indique la fecha de vencimiento."; msg.className = "text-xs font-medium text-red-700"; return; }
+  btn.disabled = true; msg.className = "text-xs font-medium text-slate-600"; msg.textContent = "Guardando…";
+  const { id, ri } = S.editando;
+  try {
+    await S.db.doc("registros/" + clave(id, ri)).set(cuerpoRegistro({ tipo, fecha, obs: document.getElementById("eObs").value.trim(), pdfs: S.borrador.pdfs }));
+    msg.className = "text-xs font-medium text-emerald-700"; msg.textContent = "Guardado.";
+    setTimeout(cerrarEditor, 500);
+  } catch (err) {
+    msg.className = "text-xs font-medium text-red-700";
+    msg.textContent = err && err.code === "invalid_argument" ? "Su cuenta no tiene permiso de administrador para guardar en este tablero." : "No se pudo guardar; inténtelo de nuevo.";
+  } finally { btn.disabled = false; }
+}
+function cerrarEditor() { cerrar("editModal"); S.editando = null; }
+
+// ---- Visor PDF integrado y descarga ----
+const PV = { url: "", nombre: "", buf: null, pdf: null, zoom: 1, token: 0 };
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const nombrePdf = n => (/\.pdf$/i.test(n) ? n : n + ".pdf");
+
+function verDoc(id, ri, i) {
+  const e = porId(id), d = docsDe(e, ri)[i];
+  if (!d) return;
+  if (d.src !== "tablero") { window.open(d.u, "_blank", "noopener"); return; }
+  abrirPdf(d.u, d.n, `${e.name} · ${REQUERIMIENTOS[ri]}`);
+}
+async function abrirPdf(url, nombre, sub) {
+  PV.url = url; PV.nombre = nombre; PV.zoom = 1; PV.buf = null; PV.pdf = null;
+  document.getElementById("pTitulo").textContent = nombre;
+  document.getElementById("pSub").textContent = sub;
+  document.getElementById("pBajar").onclick = ev => bajarUrl(url, nombre, ev.currentTarget);
+  document.getElementById("pMsg").classList.add("hidden");
+  document.getElementById("pdfModal").classList.remove("hidden");
+  if (window.lucide) lucide.createIcons();
+  const cont = document.getElementById("pCont");
+  cont.innerHTML = `<p class="text-sm text-slate-600 py-10">Cargando documento…</p>`;
+  try {
+    if (!window.pdfjsLib) throw new Error("visor");
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("http " + r.status);
+    PV.buf = await r.arrayBuffer();
+    PV.pdf = await pdfjsLib.getDocument({ data: PV.buf.slice(0) }).promise;
+    pintarPaginas();
+  } catch (err) {
+    cont.innerHTML = `<div class="text-sm text-slate-700 py-10 text-center max-w-md">No se pudo mostrar el documento aquí.<br><a href="${esc(url)}" target="_blank" rel="noopener" class="inline-flex mt-3 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-medium">Abrir en una pestaña nueva</a></div>`;
+  }
+}
+async function pintarPaginas() {
+  const tok = ++PV.token, pdf = PV.pdf, cont = document.getElementById("pCont");
+  if (!pdf) return;
+  cont.innerHTML = "";
+  document.getElementById("pZoom").textContent = Math.round(PV.zoom * 100) + "%";
+  document.getElementById("pPags").textContent = `${pdf.numPages} ${pdf.numPages === 1 ? "página" : "páginas"}`;
+  const ancho = Math.max(280, cont.clientWidth - 24), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  for (let n = 1; n <= pdf.numPages; n++) {
+    if (tok !== PV.token) return;
+    const page = await pdf.getPage(n);
+    const base = page.getViewport({ scale: 1 });
+    const escala = (Math.min(ancho, 1000) / base.width) * PV.zoom;
+    const vp = page.getViewport({ scale: escala * dpr });
+    const c = document.createElement("canvas");
+    c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+    c.style.width = Math.floor(vp.width / dpr) + "px"; c.style.height = Math.floor(vp.height / dpr) + "px";
+    c.style.maxWidth = PV.zoom > 1 ? "none" : "100%";
+    c.className = "bg-white shadow-md shrink-0";
+    c.setAttribute("aria-label", `Página ${n}`);
+    cont.appendChild(c);
+    await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+  }
+}
+function zoomPdf(dir) { PV.zoom = Math.min(3, Math.max(0.5, +(PV.zoom + dir * 0.25).toFixed(2))); pintarPaginas(); }
+function cerrarPdf() { PV.token++; PV.pdf = null; PV.buf = null; document.getElementById("pdfModal").classList.add("hidden"); document.getElementById("pCont").innerHTML = ""; }
+
+function bajarDoc(id, ri, i, btn) {
+  const d = docsDe(porId(id), ri)[i];
+  if (!d) return;
+  if (d.src !== "tablero") { window.open(d.u, "_blank", "noopener"); return; }
+  bajarUrl(d.u, d.n, btn);
+}
+async function bajarUrl(url, nombre, btn) {
+  const original = btn ? btn.innerHTML : "";
+  const aviso = txt => { if (btn) { btn.textContent = txt; setTimeout(() => { btn.innerHTML = original; if (window.lucide) lucide.createIcons(); }, 2500); } };
+  if (!S.downloads) {
+    const m = document.getElementById("pMsg");
+    if (!document.getElementById("pdfModal").classList.contains("hidden")) { m.innerHTML = `La descarga directa no está disponible en esta vista. <a class="underline font-medium" href="${esc(url)}" target="_blank" rel="noopener">Abra el PDF en una pestaña nueva</a> y guárdelo desde ahí.`; m.classList.remove("hidden"); }
+    else window.open(url, "_blank", "noopener");
+    return;
+  }
+  try {
+    if (btn) btn.textContent = "Preparando…";
+    const datos = (PV.url === url && PV.buf) ? new Blob([PV.buf], { type: "application/pdf" }) : await (await fetch(url)).blob();
+    await S.downloads.save({ filename: nombrePdf(nombre), data: datos });
+    aviso("Descargado");
+  } catch (err) {
+    const c = err && err.code;
+    if (c === "declined") { if (btn) { btn.innerHTML = original; if (window.lucide) lucide.createIcons(); } return; }
+    aviso(c === "rate_limited" ? "Espere un momento" : "No se pudo descargar");
+  }
+}
+
+function copiarRuta(id, i) {
+  const d = docsDe(porId(id), reqIdx())[i];
+  copiar(d.l, document.getElementById("mCopyMsg"), "Ruta del servidor copiada (red interna 192.168.0.15)");
+}
+function copiar(texto, msgEl, ok, ta) {
+  const fallo = () => { if (ta) { ta.focus(); ta.select(); msgEl.textContent = "Texto seleccionado: presione Ctrl+C"; } else msgEl.textContent = texto; };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(texto).then(() => msgEl.textContent = ok).catch(fallo);
+  else fallo();
+}
+
+function abrirCSV() {
+  const ri = reqIdx(), req = REQUERIMIENTOS[ri];
+  const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const filas = ["Razon Social,Estacion,Clave E.S.,Ubicacion,Requerimiento Legal,No. Permiso,Fecha,Estatus,Detalle,Observaciones,Ultima actualizacion,PDF principal,Documentos"];
+  ESTACIONES.forEach(e => {
+    const s = estatus(e, ri), r = S.reg[clave(e.id, ri)], docs = docsDe(e, ri);
+    filas.push([e.razon, e.name, e.clave, e.direccion, req, e.permiso, s.fecha || "", s.texto, s.detalle, [e.obs, r && r.obs].filter(Boolean).join(" | "), r && r.updatedAt ? r.updatedAt.slice(0,10) : "", docs[0] ? (docs[0].src === "tablero" ? "(PDF en tablero) " + docs[0].n : docs[0].u) : "", docs.map(d => d.n).join(" | ")].map(q).join(","));
+  });
+  document.getElementById("csvText").value = filas.join("\n");
+  document.getElementById("csvMsg").textContent = `${ESTACIONES.length} filas · ${req}`;
+  document.getElementById("csvModal").classList.remove("hidden");
+}
+
+function cerrar(id) { document.getElementById(id).classList.add("hidden"); if (id === "docModal") S.visorId = null; }
+
+// ---- Buzón de documentación de Normatividad ----
+const FORM_BUZON = "https://docs.google.com/forms/d/e/1FAIpQLSfBJg-uqL9bHny2Hypng0SQUVJAVVkG42mTgFeIQ_qFnG_7_Q/viewform";
+function abrirFormulario() { const a = document.createElement("a"); a.href = FORM_BUZON; a.target = "_blank"; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
+// Cada quien escribe sus solicitudes en buzon/<su id>/items/<folio>; solo los administradores leen todo el buzón.
+S.preg = {}; S.pregSubs = {}; S.pregModo = null;
+const ESTADOS_B = { pendiente: ["Pendiente", "bg-amber-100 text-amber-800"], revision: ["En revisión", "bg-sky-100 text-sky-800"], enviado: ["Atendida", "bg-emerald-100 text-emerald-800"] };
+const tipoSel = () => (document.querySelector('input[name="qTipo"]:checked') || {}).value || "documento";
+const okCorreo = c => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c);
+function qMsg(t, cls) { const m = document.getElementById("qMsg"); m.className = "text-xs font-medium min-h-4 " + (cls || ""); m.textContent = t; }
+
+function ajustarTipo() {
+  const doc = tipoSel() === "documento";
+  document.getElementById("qReqLbl").textContent = doc ? "Documento solicitado" : "Tema (opcional)";
+  document.getElementById("qTextoLbl").textContent = doc ? "Detalle de la solicitud (opcional)" : "Pregunta";
+  document.getElementById("qTexto").placeholder = doc ? "Ej. Necesito el dictamen vigente y el expediente de inspección para la auditoría del día 20." : "Ej. ¿Cuál es el folio de ingreso de la renovación?";
+  document.getElementById("qReq").options[0].textContent = doc ? "Seleccione el documento…" : "General";
+}
+function abrirPregunta(eid, ri) {
+  const qe = document.getElementById("qEst"), qr = document.getElementById("qReq");
+  qe.innerHTML = `<option value="">Seleccione la estación…</option>` + ESTACIONES.map(e => `<option value="${e.id}">${esc(e.name)} (${e.clave}) · ${esc(e.razon)}</option>`).join("");
+  qr.innerHTML = `<option value=""></option>` + REQUERIMIENTOS.map((r, i) => `<option value="${i}">${esc(r)}</option>`).join("") + `<option value="otro">Otro documento (indicar en el detalle)</option>`;
+  qe.value = eid || ""; qr.value = (eid && ri != null) ? String(ri) : "";
+  ajustarTipo(); qMsg("");
+  pintarPropias();
+  document.getElementById("pregModal").classList.remove("hidden");
+  if (window.lucide) lucide.createIcons();
+}
+async function enviarPregunta() {
+  const tipo = tipoSel(), eid = document.getElementById("qEst").value, rv = document.getElementById("qReq").value;
+  const texto = document.getElementById("qTexto").value.trim(), nombre = document.getElementById("qNombre").value.trim(), correo = document.getElementById("qCorreo").value.trim();
+  if (!eid) return qMsg("Seleccione la estación que solicita.", "text-red-700");
+  if (tipo === "documento" && !rv) return qMsg("Seleccione el documento que necesita.", "text-red-700");
+  if (tipo === "documento" && rv === "otro" && texto.length < 3) return qMsg("Indique en el detalle qué documento necesita.", "text-red-700");
+  if (tipo === "pregunta" && texto.length < 5) return qMsg("Escriba su pregunta.", "text-red-700");
+  if (!nombre) return qMsg("Escriba su nombre.", "text-red-700");
+  if (!okCorreo(correo)) return qMsg("Escriba un correo válido para enviarle la respuesta.", "text-red-700");
+  if (!S.db || !S.myId) return qMsg("El buzón no está disponible en esta vista. Abra el tablero con su cuenta de Claude.", "text-red-700");
+  const e = porId(eid), ahora = new Date();
+  const folio = "BZ-" + ahora.toISOString().slice(2, 10).replace(/-/g, "") + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+  const btn = document.getElementById("qEnviar"); btn.disabled = true;
+  try {
+    await S.db.doc(`buzon/${S.myId}`).set({ ultima: ahora.toISOString() });
+    await S.db.doc(`buzon/${S.myId}/items/${folio}`).set({
+      folio, tipo, estacion: eid, estacionNombre: `${e.name} (${e.clave})`, razon: e.razon,
+      req: rv === "" || rv === "otro" ? null : +rv, documento: rv === "otro" ? "Otro documento" : rv === "" ? "" : REQUERIMIENTOS[+rv],
+      texto, nombre, correo, autor: S.myId, creada: ahora.toISOString(), estado: "pendiente", nota: "", atendidaPor: null, atendidaAt: null
+    });
+    qMsg(`Solicitud ${folio} registrada. Normatividad la revisará y le enviará la respuesta a ${correo}.`, "text-emerald-700");
+    document.getElementById("qTexto").value = "";
+  } catch (err) {
+    qMsg(err && err.code === "invalid_argument"
+      ? "Su acceso al tablero es de solo lectura y no permite enviar solicitudes. Pida a Normatividad acceso de Colaborador."
+      : "No se pudo registrar la solicitud (" + ((err && err.code) || "error") + "). Intente de nuevo.", "text-red-700");
+  } finally { btn.disabled = false; }
+}
+
+function suscribirPreguntas() {
+  if (!S.db || !S.myId) return;
+  const modo = S.puedeEditar ? "admin" : "propio";
+  if (S.pregModo === modo) return;
+  S.pregModo = modo;
+  Object.values(S.pregSubs).forEach(u => { try { u(); } catch {} }); S.pregSubs = {}; S.preg = {};
+  const subItems = uid => {
+    if (S.pregSubs[uid]) return;
+    S.pregSubs[uid] = S.db.collection(`buzon/${uid}/items`).onSnapshot(snap => {
+      Object.keys(S.preg).forEach(k => { if (k.startsWith(uid + "/")) delete S.preg[k]; });
+      snap.docs.forEach(d => { if (d.exists) S.preg[uid + "/" + d.id] = { ...d.data(), _k: uid + "/" + d.id, _path: `buzon/${uid}/items/${d.id}` }; });
+      pintarBandeja(); pintarPropias();
+    }, () => {});
+  };
+  if (modo === "admin") S.pregSubs._raiz = S.db.collection("buzon").onSnapshot(snap => { snap.docs.forEach(d => { if (d.exists) subItems(d.id); }); }, () => {});
+  else subItems(S.myId);
+}
+const pregLista = () => Object.values(S.preg).sort((a, b) => (b.creada || "").localeCompare(a.creada || ""));
+const etiquetaTipo = p => p.tipo === "pregunta"
+  ? `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800">Pregunta</span>`
+  : `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">Solicitud de documento</span>`;
+function pintarBandeja() {
+  const todas = pregLista(), abiertas = todas.filter(p => p.estado !== "enviado");
+  const c = document.getElementById("bandejaCont"); c.hidden = !abiertas.length; c.textContent = abiertas.length;
+  if (!esAdmin()) return;
+  const fe = document.getElementById("bandejaEst");
+  if (fe.options.length <= 1) fe.innerHTML = `<option value="">Todas las estaciones</option>` + ESTACIONES.map(e => `<option value="${e.id}">${esc(e.name)} (${e.clave})</option>`).join("");
+  const f = document.getElementById("bandejaFiltro").value, est = fe.value;
+  const lista = todas.filter(p => (f === "todas" || (f === "abiertas" ? p.estado !== "enviado" : p.estado === f)) && (!est || p.estacion === est));
+  const vac = document.getElementById("bandejaVacia");
+  vac.hidden = !!lista.length; vac.textContent = todas.length ? "No hay solicitudes con este filtro." : "Aún no hay solicitudes en el buzón.";
+  document.getElementById("bandejaLista").innerHTML = lista.map(p => {
+    const [eTxt, eCls] = ESTADOS_B[p.estado] || ESTADOS_B.pendiente;
+    return `<li class="p-4 space-y-2 ${p.estado === "enviado" ? "bg-gray-50" : ""}">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-sm font-bold text-slate-900">${esc(p.estacionNombre || p.estacion)}</span>
+        ${etiquetaTipo(p)}
+        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full ${eCls}">${eTxt}</span>
+        <span class="text-[11px] text-slate-500 ml-auto">${esc(p.folio || "")} · ${fFechaHora(p.creada)}</span>
+      </div>
+      ${p.documento ? `<p class="text-xs text-slate-700"><span class="text-slate-500">Documento:</span> <b>${esc(p.documento)}</b></p>` : ""}
+      ${p.texto ? `<p class="text-sm text-slate-900 whitespace-pre-wrap break-words">${esc(p.texto)}</p>` : ""}
+      <p class="text-xs text-slate-500">Solicita: ${esc(p.nombre || "—")} · Enviar a: <span class="font-medium text-slate-800 select-all">${esc(p.correo || "—")}</span>
+        <button onclick="copiarCorreoB('${esc(p._k)}', this)" class="ml-1 text-teal-700 hover:underline cursor-pointer">copiar</button></p>
+      ${p.estacion && p.req != null ? `<button onclick="irPregunta('${esc(p.estacion)}', ${+p.req})" class="text-xs text-teal-700 hover:underline cursor-pointer">Abrir el expediente en el tablero</button>` : ""}
+      <div class="flex flex-col sm:flex-row gap-2">
+        <input data-nota="${esc(p._k)}" value="${esc(p.nota || "")}" maxlength="500" placeholder="Nota de seguimiento (la ve quien solicitó)" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-xs">
+        <select data-estado="${esc(p._k)}" class="border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
+          ${Object.entries(ESTADOS_B).map(([k, [t]]) => `<option value="${k}" ${p.estado === k ? "selected" : ""}>${t}</option>`).join("")}
+        </select>
+        <button onclick="atender('${esc(p._k)}')" class="text-xs px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white cursor-pointer">Guardar</button>
+      </div>
+      ${p.estado === "enviado" && p.atendidaAt ? `<p class="text-[11px] text-slate-400">Atendida ${fFechaHora(p.atendidaAt)}</p>` : ""}
+    </li>`;
+  }).join("");
+}
+function copiarCorreoB(k, btn) { const p = S.preg[k]; if (!p) return; const sp = document.createElement("span"); copiar(p.correo, sp, "copiado"); btn.textContent = "copiado"; setTimeout(() => btn.textContent = "copiar", 2000); }
+async function atender(k) {
+  const p = S.preg[k]; if (!p) return;
+  const nota = document.querySelector(`[data-nota="${CSS.escape(k)}"]`).value.trim();
+  const estado = document.querySelector(`[data-estado="${CSS.escape(k)}"]`).value;
+  try { await S.db.doc(p._path).update({ estado, nota, atendidaPor: estado === "enviado" ? S.myId : null, atendidaAt: estado === "enviado" ? new Date().toISOString() : null }); }
+  catch (e) { const v = document.getElementById("bandejaVacia"); v.hidden = false; v.textContent = "No se pudo guardar (" + (e.code || "error") + ")."; }
+}
+function irPregunta(eid, ri) { document.getElementById("reqFilter").value = String(ri); render(); visor(eid); }
+function pintarPropias() {
+  if (esAdmin()) { document.getElementById("qPropias").hidden = true; return; }
+  const mias = pregLista().filter(p => p.autor === S.myId);
+  const fc = document.getElementById("flotCont"); fc.hidden = !mias.length; fc.textContent = mias.length;
+  document.getElementById("qPropias").hidden = !mias.length;
+  document.getElementById("qPropiasLista").innerHTML = mias.map(p => {
+    const [eTxt, eCls] = ESTADOS_B[p.estado] || ESTADOS_B.pendiente;
+    return `<li class="p-3 space-y-1">
+      <p class="text-[11px] text-slate-500 flex flex-wrap gap-1.5 items-center">${esc(p.folio || "")} · ${fFechaHora(p.creada)} · ${esc(p.estacionNombre || "")} <span class="font-semibold px-1.5 rounded ${eCls}">${eTxt}</span></p>
+      <p class="text-sm text-slate-800 break-words">${p.documento ? "<b>" + esc(p.documento) + "</b>" + (p.texto ? " · " : "") : ""}${esc(p.texto || "")}</p>
+      ${p.nota ? `<p class="text-xs bg-emerald-50 border border-emerald-200 rounded p-2 text-emerald-900"><b>Normatividad:</b> ${esc(p.nota)}</p>` : ""}
+    </li>`;
+  }).join("");
+}
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") { if (!document.getElementById("pdfModal").classList.contains("hidden")) { cerrarPdf(); return; } cerrar("docModal"); cerrar("csvModal"); cerrarEditor(); } });
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", arrancar); else arrancar();
+</script>
